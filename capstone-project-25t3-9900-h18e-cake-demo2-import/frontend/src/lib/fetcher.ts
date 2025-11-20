@@ -66,3 +66,26 @@ export const api = {
     request(`sections/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
   deleteSection: (id: string) => request(`sections/${id}`, { method: 'DELETE' }),
 };
+
+
+// 兼容旧代码的命名导出 —— 最小改动
+export async function fetchStory() {
+  return api.story();
+}
+
+export async function fetchSections() {
+  return api.sections();
+}
+
+export async function createSection(payload: any) {
+  return api.createSection(payload);
+}
+
+export async function updateSection(id: string, payload: any) {
+  return api.updateSection(id, payload);
+}
+
+export async function deleteSection(id: string) {
+  return api.deleteSection(id);
+}
+
