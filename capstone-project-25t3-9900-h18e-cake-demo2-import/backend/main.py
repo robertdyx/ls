@@ -121,6 +121,20 @@ def get_db():
 def health():
     return {"ok": True}
 
+# 让老代码/静态脚手架也能工作：/story.json 返回同样的数据
+@app.get("/story.json")
+def story_json(db: Session = Depends(get_db)):
+    return get_story(db)
+
+# 可选：根路径给个提示，避免误以为这里是 JSON
+@app.get("/")
+def root():
+    return {
+        "service": "Posts Backend",
+        "message": "Use /story or /posts ... This root is not JSON data endpoint."
+    }
+
+
 @app.post("/posts", response_model=schemas.PostRead)
 def create_post(post: schemas.PostCreate, db: Session = Depends(get_db)):
     created = crud.create_post(db, post)
