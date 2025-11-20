@@ -1,49 +1,49 @@
-// src/lib/fetcher.ts
-import { Story } from './types';
+// src/fetcher.ts
+type FetcherOptions = RequestInit & { timeoutMs?: number };
 
-// 动态获取 API 地址，支持跨设备访问
-// 如果当前是 localhost，就用 localhost:8888
-// 否则使用当前主机名（适合同一局域网内的其他设备访问）
-const getApiBaseUrl = () => {
-  const envUrl = (import.meta as any).env?.VITE_API_BASE?.trim?.();
-  if (envUrl) return envUrl;
-  const isLocalhost = window.location.hostname === 'localhost' || 
-                       window.location.hostname === '127.0.0.1';
-  
-  if (isLocalhost) {
-    return 'http://localhost:8888';
-  } else {
-    // 使用当前页面的 hostname，端口 8888
-    // 例如：如果通过 192.168.1.100:5173 访问，API 就是 http://192.168.1.100:8888
-    return `${window.location.protocol}//${window.location.hostname}:8888`;
+function resolveApiBase(): string {
+  const sp = new URLSearchParams(window.location.search);
+  const fromQuery = sp.get("api");                 // new: ?api=https://xxxx.ngrok-free.dev
+  const fromWindow = (window as any).__API_BASE__;  // 可选：父页注入
+  // 环境变量（Actions/本地 .env）最后兜底
+  const fromEnv = (import.meta as any).env?.VITE_API_BASE;
+
+  // 本地开发兜底：如果是 file:// 就回落到 localhost（仅本地调试用）
+  const localFallback =
+    location.protocol === "file:" ? "http://127.0.0.1:8888" : undefined;
+
+  return fromQuery || fromWindow || fromEnv || localFallback || "";
+}
+
+export const API_BASE = resolveApiBase();
+
+async function withTimeout(p: Promise<Response>, ms = 10000) {
+  return Promise.race([
+    p,
+    new Promise<Response>((_, r) => setTimeout(() => r(new Error("timeout") as any), ms))
+  ]) as Promise<Response>;
+}
+
+export async function api<T = any>(path: string, opts: FetcherOptions = {}): Promise<T> {
+  if (!API_BASE) throw new Error("API base not configured");
+  const url = API_BASE.replace(/\/+$/, "") + path;
+  const res = await withTimeout(fetch(url, {
+    headers: { "Content-Type": "application/json", ...(opts.headers || {}) },
+    ...opts,
+  }), opts.timeoutMs ?? 10000);
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`HTTP ${res.status}: ${text}`);
   }
-};
+  return res.headers.get("content-type")?.includes("application/json")
+    ? res.json()
+    : (res.text() as any);
+}
 
-const API_BASE_URL = getApiBaseUrl();
-
-export async function fetchStory(): Promise<Story> {
-  try {
-    // 优先从后端数据库获取
-    const response = await fetch(`${API_BASE_URL}/story`);
-    
-    if (response.ok) {
-      const story: Story = await response.json();
-      console.log('✓ Story loaded from database');
-      return story;
-    }
-    
-    // 如果数据库没有数据，回退到本地 story.json
-    console.log('⚠ Database empty, falling back to local story.json');
-    const fallbackResponse = await fetch('/story.json');
-    
-    if (!fallbackResponse.ok) {
-      throw new Error(`HTTP error! status: ${fallbackResponse.status}`);
-    }
-    
-    const story: Story = await fallbackResponse.json();
-    return story;
-  } catch (error) {
-    console.error('Failed to fetch story:', error);
-    throw error;
-  }
+// 可在应用初始化时调用：检查后端是否可达
+export async function probeBackend(): Promise<void> {
+  if (!API_BASE) throw new Error("API base not configured");
+  // 后端已有 /healthz 路由
+  await api("/healthz");
 }
