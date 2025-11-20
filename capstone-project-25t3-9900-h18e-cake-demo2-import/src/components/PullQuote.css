@@ -1,0 +1,135 @@
+.pull-quote-container {
+  margin: var(--block-spacing-vertical) auto;
+  max-width: var(--content-max-width);
+}
+
+.pull-quote {
+  position: relative;
+  margin: 0;
+  padding: 3rem 2rem;
+  background: transparent;
+  border: none;
+  text-align: center;
+}
+
+/* 引用文字 */
+.quote-text {
+  font-family: var(--font-serif);
+  font-weight: 600;
+  font-size: clamp(1.125rem, 4vw, var(--font-size-pullquote));
+  line-height: 1.25;
+  color: var(--color-accent, var(--color-primary));
+  margin: 0 0 1.2rem 0;
+}
+
+/* 引用来源（作者或发言人） */
+.quote-attribution {
+  display: block;
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-size: var(--font-size-category);
+  color: var(--color-muted);
+  line-height: 1.2;
+  text-align: center;
+  margin-top: 0.25rem;
+}
+
+/* === L-shaped framing device === */
+/* 左下角和右上角的粉色锐角框，来源于 Newsworthy logo 几何结构 */
+.quote-corner-top-right,
+.quote-corner-bottom-left {
+  position: absolute;
+  width: 36px;
+  height: 36px;
+  pointer-events: none;
+}
+
+/* Top-right */
+.quote-corner-top-right {
+  top: 10px;
+  right: 10px;
+}
+
+/* Bottom-left */
+.quote-corner-bottom-left {
+  bottom: 10px;
+  left: 10px;
+}
+
+/* 四个角框的线条 */
+.quote-corner-top-right::before,
+.quote-corner-top-right::after,
+.quote-corner-bottom-left::before,
+.quote-corner-bottom-left::after {
+  content: "";
+  position: absolute;
+  background: var(--color-accent, #e5007d);
+}
+
+/* 上右角 — 横线与竖线 */
+.quote-corner-top-right::before {
+  top: 0;
+  right: 0;
+  width: 22px;
+  height: 4px;
+}
+.quote-corner-top-right::after {
+  top: 0;
+  right: 0;
+  width: 4px;
+  height: 22px;
+}
+
+/* 下左角 — 横线与竖线 */
+.quote-corner-bottom-left::before {
+  bottom: 0;
+  left: 0;
+  width: 22px;
+  height: 4px;
+}
+.quote-corner-bottom-left::after {
+  bottom: 0;
+  left: 0;
+  width: 4px;
+  height: 22px;
+}
+
+/* === 响应式 (Mobile ≤ 768px) === */
+@media (max-width: 768px) {
+  .pull-quote-container {
+    margin: calc(var(--block-spacing-vertical) * 0.75) auto;
+  }
+
+  .pull-quote {
+    padding: 2.5rem 1.25rem;
+  }
+
+  .quote-text {
+    font-size: 1.375rem; /* ≈22px */
+    line-height: 1.3;
+    margin-bottom: 1rem;
+  }
+
+  .quote-attribution {
+    font-size: 0.875rem;
+    line-height: 1.2;
+  }
+
+  .quote-corner-top-right,
+  .quote-corner-bottom-left {
+    width: 28px;
+    height: 28px;
+  }
+
+  .quote-corner-top-right::before,
+  .quote-corner-bottom-left::before {
+    width: 16px;
+    height: 3px;
+  }
+
+  .quote-corner-top-right::after,
+  .quote-corner-bottom-left::after {
+    width: 3px;
+    height: 16px;
+  }
+}

@@ -1,0 +1,206 @@
+/* ============================================ */
+/* ImageGIF.css - 完整增强版（含 layout 支持 + skeleton） */
+/* ============================================ */
+
+/* 继承 ImageGroup 的布局体系 */
+@import './ImageGroup.css';
+
+/* ============================================ */
+/* GIF 外层容器 - 与 layout 体系配合使用 */
+/* ============================================ */
+.image-gif-container {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  max-width: 100%;
+  background: transparent;
+  display: block;
+}
+
+/* ============================================ */
+/* GIF 包裹层 - 控制 hover、loading 等 */
+/* ============================================ */
+.image-gif-wrapper {
+  position: relative;
+  cursor: default;
+  overflow: hidden;
+  background: transparent; /* 去掉灰底 */
+  margin: 0;
+}
+
+.image-gif-wrapper--interactive {
+  cursor: pointer;
+}
+
+/* ============================================ */
+/* GIF 图片本体 */
+/* ============================================ */
+.image-gif-wrapper img {
+  width: 100%;
+  height: auto;
+  display: block;
+  object-fit: contain;
+  border-radius: 6px;
+  transition: transform 0.3s ease;
+}
+
+.image-gif-wrapper:hover img {
+  transform: scale(1.02);
+}
+
+/* ============================================ */
+/* 加载状态骨架动画（Skeleton shimmer） */
+/* ============================================ */
+.image-gif-wrapper.loading {
+  background: linear-gradient(
+    90deg,
+    #f0f0f0 25%,
+    #e0e0e0 50%,
+    #f0f0f0 75%
+  );
+  background-size: 200% 100%;
+  animation: gif-loading 1.6s ease-in-out infinite;
+  min-height: 280px;
+}
+
+@keyframes gif-loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* ============================================ */
+/* layout 兼容性增强（可单独使用） */
+/* ============================================ */
+.layout-default.image-gif-container {
+  max-width: var(--content-max-width);
+  margin: var(--block-spacing-vertical) auto;
+}
+
+.layout-half.image-gif-container {
+  width: calc((100% - 1rem) / 2);
+  flex: 0 0 calc((100% - 1rem) / 2);
+}
+
+.layout-third.image-gif-container {
+  width: calc((100% - 2rem) / 3);
+  flex: 0 0 calc((100% - 2rem) / 3);
+}
+
+.layout-superfull.image-gif-container {
+  width: var(--full-bleed-width, 100vw);
+  margin-inline: var(--full-bleed-offset, calc(50% - 50vw));
+  background: transparent;
+  overflow: hidden;
+  margin-block: var(--block-spacing-vertical);
+}
+
+.layout-superfull.image-gif-container img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* ============================================ */
+/* 响应式优化 */
+/* ============================================ */
+@media (max-width: 1024px) {
+  .image-gif-container {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 768px) {
+  .image-gif-container {
+    max-width: 100%;
+    margin: var(--block-spacing-vertical) auto;
+  }
+
+  /* 手机端半宽与三列改为全宽 */
+  .layout-half.image-gif-container,
+  .layout-third.image-gif-container {
+    width: 100%;
+    flex: 0 0 100%;
+  }
+}
+
+/* ============================================ */
+/* 辅助功能：无障碍与用户偏好 */
+/* ============================================ */
+.image-gif-container:focus-within {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .image-gif-wrapper img {
+    transition: none;
+  }
+  .image-gif-wrapper:hover img {
+    transform: none;
+  }
+  .image-gif-wrapper.loading {
+    animation: none;
+  }
+}
+
+/* ============================================ */
+/* 打印优化 */
+/* ============================================ */
+@media print {
+  .image-gif-container {
+    max-width: 100%;
+    page-break-inside: avoid;
+  }
+  .image-gif-wrapper img {
+    max-height: none;
+    border-radius: 0;
+  }
+  .image-gif-wrapper:hover img {
+    transform: none;
+  }
+}
+
+/* ============================================ */
+/* Superfull caption alignment fix (修改：字体继承) */
+/* ============================================ */
+.layout-superfull.image-gif-container figcaption {
+  max-width: 96%;                 /* ✅ 缩进更小，视觉更靠近图片 */
+  margin: 0.75rem auto 0;
+  padding: 0 1rem;
+  text-align: left;
+  font-family: inherit;           /* ← 改为继承页面/主题字体 */
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--color-muted);
+}
+
+/* 大屏略收缩，保持对称留白 */
+@media (min-width: 1440px) {
+  .layout-superfull.image-gif-container figcaption {
+    max-width: 94%;
+    padding: 0 1.25rem;
+  }
+}
+
+/* 小屏缩进更紧凑 */
+@media (max-width: 768px) {
+  .layout-superfull.image-gif-container figcaption {
+    max-width: 90%;
+    padding: 0 0.75rem;
+  }
+}
+/* 让所有布局下的 GIF 图注都跟随主题字体 */
+.image-gif-container figcaption {
+  font-family: inherit;
+}
+
+/* 如果 ImageGroup.css 里给 figcaption 有单独字体，强制覆盖 */
+.image-gif-container figcaption,
+.image-figure figcaption,
+.figure figcaption {
+  font-family: inherit !important;
+}
