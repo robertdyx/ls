@@ -1,91 +1,95 @@
-// fetcher.ts —— 统一封装 API 基地址与请求（稳妥版）
-
-function readApiBaseFromQuery(): string | null {
-  // 1) 先尝试从顶层窗口（demo.html）读取 ?api=
-  try {
-    const topWin: any = (typeof window !== 'undefined' && window.top) ? window.top : null;
-    const topSearch = topWin && topWin.location ? topWin.location.search : '';
-    const pTop = new URLSearchParams(topSearch || '');
-    const apiTop = pTop.get('api');
-    if (apiTop) return decodeURIComponent(apiTop);
-  } catch {
-    /* ignore 跨域访问 top 抛错也忽略 */
-  }
-  // 2) 再尝试当前窗口
-  const selfSearch = (typeof window !== 'undefined' && window.location) ? window.location.search : '';
-  const pSelf = new URLSearchParams(selfSearch || '');
-  const apiSelf = pSelf.get('api');
-  if (apiSelf) return decodeURIComponent(apiSelf);
-  return null;
-}
-
-function normalizeBase(u: string): string {
-  let s = (u || '').trim().replace(/\/+$/, ''); // 去掉末尾斜杠
-  if (!s) return s;
-  if (!/^https?:\/\//i.test(s)) s = 'https://' + s; // ngrok 免费域通常走 https
-  return s;
-}
-
-export function getApiBase(): string {
-  const fromQuery = readApiBaseFromQuery();
-  if (fromQuery) return normalizeBase(fromQuery) || '';
-
-  // 兜底：本地开发走 8888 端口
-  const hasWin = typeof window !== 'undefined';
-  const proto = hasWin && window.location && window.location.protocol === 'https:' ? 'https://' : 'http://';
-  const host = hasWin && window.location ? window.location.hostname : 'localhost';
-  return `${proto}${host}:8888`;
-}
-
-export async function request(path: string, init?: RequestInit): Promise<any> {
-  const base = getApiBase().replace(/\/+$/, '');
-  const url = `${base}/${String(path || '').replace(/^\/+/, '')}`; // 避免双斜杠
-  const res = await fetch(url, {
-    headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
-    ...init,
-  });
-
-  const ct = res.headers.get('content-type') || '';
-  const body = ct.includes('application/json') ? await res.json() : await res.text();
-
-  if (!res.ok) {
-    const msg = typeof body === 'string' ? body : JSON.stringify(body);
-    throw new Error(`HTTP ${res.status} ${res.statusText} - ${msg}`);
-  }
-  return body;
-}
-
-// 你页面里会用到的接口
-export const api = {
-  health: () => request('healthz'),
-  story: () => request('story'),
-  sections: () => request('sections'),
-  createSection: (payload: any) =>
-    request('sections', { method: 'POST', body: JSON.stringify(payload) }),
-  updateSection: (id: string, payload: any) =>
-    request(`sections/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
-  deleteSection: (id: string) => request(`sections/${id}`, { method: 'DELETE' }),
+// src/lib/fetcher.ts
+type Section = {
+  id: number;
+  type: string;
+  title?: string;
+  content?: string;
+  order?: number;
+};
+type Story = {
+  id: number;
+  title: string;
+  sections: Section[];
 };
 
+// 1) 从 URL ?api= 读取后端根地址，去掉尾部斜杠
+const params = new URLSearchParams(window.location.search);
+const apiFromQuery = params.get("api");
+export const API_BASE = apiFromQuery
+  ? decodeURIComponent(apiFromQuery).replace(/\/+$/, "")
+  // 本地开发兜底（vite 本地跑时没有 ?api= 也能用）
+  : "http://localhost:8888";
 
-// 兼容旧代码的命名导出 —— 最小改动
-export async function fetchStory() {
-  return api.story();
+// 统一的取 JSON + 抛错
+async function jsonOrThrow<T>(res: Response): Promise<T> {
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    throw new Error(`HTTP ${res.status}: ${txt || res.statusText}`);
+  }
+  // 保护：后端若返回 text/html（比如 404 页面），避免 JSON.parse 报 '<'
+  const ct = res.headers.get("content-type") || "";
+  if (!ct.includes("application/json")) {
+    const snippet = (await res.text().catch(() => "")).slice(0, 120);
+    throw new Error(`Expect JSON but got ${ct || "unknown"}: ${snippet}`);
+  }
+  return res.json() as Promise<T>;
 }
 
-export async function fetchSections() {
-  return api.sections();
+// ---- API 封装 ----
+export async function fetchStory(): Promise<Story> {
+  const res = await fetch(`${API_BASE}/story`, {
+    method: "GET",
+    mode: "cors",
+  });
+  const data = await jsonOrThrow<Story>(res);
+  // 防御：保证 sections 一定是数组
+  if (!data || !Array.isArray(data.sections)) {
+    data.sections = [];
+  }
+  return data;
 }
 
-export async function createSection(payload: any) {
-  return api.createSection(payload);
+export async function fetchSections(): Promise<Section[]> {
+  const res = await fetch(`${API_BASE}/sections`, { method: "GET", mode: "cors" });
+  const data = await jsonOrThrow<Section[]>(res);
+  return Array.isArray(data) ? data : [];
 }
 
-export async function updateSection(id: string, payload: any) {
-  return api.updateSection(id, payload);
+export async function createSection(payload: Partial<Section>): Promise<Section> {
+  const res = await fetch(`${API_BASE}/sections`, {
+    method: "POST",
+    mode: "cors",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return jsonOrThrow<Section>(res);
 }
 
-export async function deleteSection(id: string) {
-  return api.deleteSection(id);
+export async function updateSection(id: number, payload: Partial<Section>): Promise<Section> {
+  const res = await fetch(`${API_BASE}/sections/${id}`, {
+    method: "PATCH",
+    mode: "cors",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return jsonOrThrow<Section>(res);
 }
 
+export async function deleteSection(id: number): Promise<{ ok: true }> {
+  const res = await fetch(`${API_BASE}/sections/${id}`, {
+    method: "DELETE",
+    mode: "cors",
+  });
+  await jsonOrThrow<any>(res);
+  return { ok: true };
+}
+
+// 兼容老代码的默认导出（若其它文件用到了 default）
+export default {
+  API_BASE,
+  fetchStory,
+  fetchSections,
+  createSection,
+  updateSection,
+  deleteSection,
+};
