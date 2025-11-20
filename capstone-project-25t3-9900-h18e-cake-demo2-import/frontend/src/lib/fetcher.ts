@@ -1,65 +1,68 @@
-// fetcher.ts  —— 统一封装 API 基地址与请求
+// fetcher.ts —— 统一封装 API 基地址与请求（稳妥版）
 
 function readApiBaseFromQuery(): string | null {
   // 1) 先尝试从顶层窗口（demo.html）读取 ?api=
   try {
-    const topSearch = (window.top && window.top.location && window.top.location.search) || '';
-    const pTop = new URLSearchParams(topSearch);
+    const topWin: any = (typeof window !== 'undefined' && window.top) ? window.top : null;
+    const topSearch = topWin && topWin.location ? topWin.location.search : '';
+    const pTop = new URLSearchParams(topSearch || '');
     const apiTop = pTop.get('api');
     if (apiTop) return decodeURIComponent(apiTop);
   } catch {
-    /* ignore */
+    /* ignore 跨域访问 top 抛错也忽略 */
   }
   // 2) 再尝试当前窗口
-  const pSelf = new URLSearchParams(window.location.search);
+  const selfSearch = (typeof window !== 'undefined' && window.location) ? window.location.search : '';
+  const pSelf = new URLSearchParams(selfSearch || '');
   const apiSelf = pSelf.get('api');
   if (apiSelf) return decodeURIComponent(apiSelf);
   return null;
 }
 
 function normalizeBase(u: string): string {
-  let s = u.trim().replace(/\/+$/, ''); // 去掉末尾斜杠
-  // ngrok 免费域名默认是 https，确保协议正确
-  if (!/^https?:\/\//i.test(s)) s = 'https://' + s;
+  let s = (u || '').trim().replace(/\/+$/, ''); // 去掉末尾斜杠
+  if (!s) return s;
+  if (!/^https?:\/\//i.test(s)) s = 'https://' + s; // ngrok 免费域通常走 https
   return s;
 }
 
 export function getApiBase(): string {
   const fromQuery = readApiBaseFromQuery();
-  if (fromQuery) return normalizeBase(fromQuery);
+  if (fromQuery) return normalizeBase(fromQuery) || '';
 
-  // 兜底：本地开发时走当前 host 的 8888 端口
-  const proto = window.location.protocol === 'https:' ? 'https://' : 'http://';
-  return `${proto}${window.location.hostname}:8888`;
+  // 兜底：本地开发走 8888 端口
+  const hasWin = typeof window !== 'undefined';
+  const proto = hasWin && window.location && window.location.protocol === 'https:' ? 'https://' : 'http://';
+  const host = hasWin && window.location ? window.location.hostname : 'localhost';
+  return `${proto}${host}:8888`;
 }
 
-async function doFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const base = getApiBase();
-  const url = `${base}/${path.replace(/^\/+/, '')}`; // 避免双斜杠
+export async function request(path: string, init?: RequestInit): Promise<any> {
+  const base = getApiBase().replace(/\/+$/, '');
+  const url = `${base}/${String(path || '').replace(/^\/+/, '')}`; // 避免双斜杠
   const res = await fetch(url, {
-    // 如需携带 Cookie：credentials: 'include',
     headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
     ...init,
   });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`HTTP ${res.status} ${res.statusText} - ${text}`);
-  }
-  // 只对 JSON 解析，避免把 HTML 当 JSON 解析的错误
+
   const ct = res.headers.get('content-type') || '';
-  if (ct.includes('application/json')) return (await res.json()) as T;
-  // 不是 JSON 时返回原文（调用处自行判断）
-  return (await res.text()) as unknown as T;
+  const body = ct.includes('application/json') ? await res.json() : await res.text();
+
+  if (!res.ok) {
+    const msg = typeof body === 'string' ? body : JSON.stringify(body);
+    throw new Error(`HTTP ${res.status} ${res.statusText} - ${msg}`);
+  }
+  return body;
 }
 
-/** 示例导出：按你的接口改成实际路径 */
+// 你页面里会用到的接口
 export const api = {
-  getHealth: () => doFetch<{ ok: boolean }>('healthz'),
-  getStory: () => doFetch<any>('story'),
-  getSections: () => doFetch<any[]>('sections'),
+  health: () => request('healthz'),
+  story: () => request('story'),
+  sections: () => request('sections'),
   createSection: (payload: any) =>
-    doFetch<any>('sections', { method: 'POST', body: JSON.stringify(payload) }),
+    request('sections', { method: 'POST', body: JSON.stringify(payload) }),
   updateSection: (id: string, payload: any) =>
-    doFetch<any>(`sections/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
-  deleteSection: (id: string) => doFetch<any>(`sections/${id}`, { method: 'DELETE' }),
+    request(`sections/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
+  deleteSection: (id: string) => request(`sections/${id}`, { method: 'DELETE' }),
 };
