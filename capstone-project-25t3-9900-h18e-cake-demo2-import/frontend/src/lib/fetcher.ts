@@ -1,60 +1,88 @@
 // fetcher.ts
-// 读取 ?api= 参数，作为后端基址；若无则用当前站点（便于本地联调）
-const params = new URLSearchParams(window.location.search);
-const apiParam = params.get("api");
-const API_BASE = apiParam ? decodeURIComponent(apiParam) : window.location.origin;
+// 读取 ?api= 后端基地址并安全拼接接口；无写死路径，兼顾本地同源调试。
 
-// 拼 URL，确保不重复/缺少斜杠
-function joinUrl(base: string, path: string) {
-  const b = base.replace(/\/+$/, "");
-  const p = path.startsWith("/") ? path : `/${path}`;
-  return `${b}${p}`;
-}
+/** 读取并规范化后端基地址（base URL） */
+function getApiBase(): string {
+  const sp = new URLSearchParams(window.location.search);
+  const raw = (sp.get("api") || "").trim();
 
-async function fetchJSON(path: string, init?: RequestInit) {
-  const url = joinUrl(API_BASE, path);
-  const res = await fetch(url, {
-    ...init,
-    mode: "cors",
-    credentials: "omit",
-    headers: {
-      Accept: "application/json",
-      ...(init?.headers || {}),
-    },
-  });
-
-  const text = await res.text();
-  if (!res.ok) {
-    throw new Error(`HTTP ${res.status} ${res.statusText} — ${text.slice(0, 200)}`);
+  if (raw) {
+    // 允许 http/https；在 GitHub Pages 场景建议使用 https（ngrok 的 https）
+    let base = raw;
+    if (!base.endsWith("/")) base += "/";
+    return base;
   }
+  // 未传 api，则走同源；便于本地起后端时调试
+  return "/";
+}
 
-  const ct = res.headers.get("content-type") || "";
-  if (!ct.includes("application/json")) {
-    // 这里就是你看到的 “Unexpected token < ...” 的根因：拿到了 HTML
-    throw new Error(`Expect JSON but got ${ct}. Body: ${text.slice(0, 200)}`);
+const API_BASE = getApiBase();
+
+/** 将相对路径与 base 做合法拼接（支持 /path 与 path 两种写法） */
+function apiUrl(path: string): string {
+  return new URL(path, API_BASE).toString();
+}
+
+/** 统一的 JSON fetch，严格校验响应类型并给出清晰报错 */
+async function jsonFetch<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
+  const resp = await fetch(input, init);
+  const ct = resp.headers.get("content-type") || "";
+
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => "");
+    throw new Error(`HTTP ${resp.status} ${resp.statusText} - ${text.slice(0, 200)}`);
   }
-  return JSON.parse(text);
+  if (ct.includes("application/json")) {
+    return resp.json() as Promise<T>;
+  }
+  const text = await resp.text().catch(() => "");
+  throw new Error(`Expect JSON but got ${ct || "unknown"}; body: ${text.slice(0, 200)}`);
 }
 
-// === 对外导出你页面用到的请求 ===
-
-// 获取 story.json 兼容格式
-export async function fetchStory() {
-  // 后端提供 /story（下方也让后端同时暴露 /story.json 以防老代码）
-  return fetchJSON("/story");
+/** GET/POST 通用方法 */
+export async function apiGet<T>(path: string): Promise<T> {
+  return jsonFetch<T>(apiUrl(path), { credentials: "omit" });
 }
-
-// 其它 CRUD 例子（按你的页面需要选用）
-export async function listPosts() {
-  return fetchJSON("/posts");
-}
-export async function readPost(id: number) {
-  return fetchJSON(`/posts/${id}`);
-}
-export async function createPost(payload: any) {
-  return fetchJSON("/posts", {
+export async function apiPost<T>(path: string, body: unknown): Promise<T> {
+  return jsonFetch<T>(apiUrl(path), {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+    credentials: "omit",
   });
 }
+
+/** ========= 你项目里常用到的一些封装（按需使用/改名） ========= */
+
+/** 健康检查：对应后端 /healthz */
+export const getHealthz = () => apiGet<{ ok: boolean }>("/healthz");
+
+/** 拉取后端 story（若后端无此路由，自动回退到静态 ./story.json） */
+export async function fetchStory(): Promise<any> {
+  try {
+    return await apiGet<any>("/story");
+  } catch (e) {
+    // 回退到静态文件，方便演示/离线预览
+    const resp = await fetch("./story.json");
+    if (!resp.ok) throw e;
+    return resp.json();
+  }
+}
+
+/** 导入 story.json：对应后端 /import（如需别名请改路径） */
+export const importStory = (story: unknown) => apiPost<{ ok: boolean }>("/import", story);
+
+/** 帖子增删改查：按你的后端实际路由修改路径 */
+export const listPosts   = () => apiGet<any[]>("/posts");
+export const createPost  = (data: any) => apiPost<any>("/posts", data);
+export const updatePost  = (id: number|string, data: any) =>
+  jsonFetch<any>(apiUrl(`/posts/${id}`), {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(data),
+  });
+export const deletePost  = (id: number|string) =>
+  jsonFetch<any>(apiUrl(`/posts/${id}`), { method: "DELETE" });
+
+/** 暴露 base，偶尔调试时有用 */
+export const API_BASE_URL = API_BASE;
