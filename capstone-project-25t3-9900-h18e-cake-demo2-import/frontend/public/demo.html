@@ -17,10 +17,11 @@
 
   <script>
     // 把当前 demo.html 上的所有查询参数（尤其是 ?api=... ）原封不动透传给应用
-    const qs = window.location.search; // 例如 ?api=https%3A%2F%2Fxxxx.ngrok-free.dev
+    const qs = window.location.search || ""; // 例如 ?api=https%3A%2F%2Fxxxx.ngrok-free.dev
     // 你的 Vite 构建产物入口路径通常就是 ./ 或者 ./index.html
-    document.getElementById('app-frame').src = './' + (qs || '');
+    document.getElementById('app').src = "./index.html" + (qs ? qs : "");
   </script>
 </body>
 </html>
+
 
