@@ -1,0 +1,272 @@
+{
+  "id": 1,
+  "version": "1.0",
+  "title": "Rescue Operation During Coastal Storm",
+  "standfirst": "This comprehensive report documents the dramatic rescue mission through exclusive videos and images, featuring eyewitness accounts from the Coast Guard, survivors, and emergency response teams.",
+  "theme": {
+    "font": "Montserrat",
+    "primaryColor": "#00007a"
+  },
+  "sections": [
+    {
+      "type": "video",
+      "src": "/media/demo/hero.mp4",
+      "poster": "/media/demo/poster.jpg",
+      "captions": "/media/demo/captions.vtt",
+      "autoplay": true,
+      "loop": true,
+      "muted": true,
+      "credit": "Video: Coast Guard Maritime Operations / John Doe"
+    },
+    {
+      "type": "paragraph",
+      "content": "<p>Eyewitnesses reported that visibility dropped below 100 meters as the storm intensified along the coastline early Thursday morning. The Coast Guard immediately dispatched an 18-person rescue team equipped with specialized equipment to navigate the treacherous conditions.</p>"
+    },
+    {
+      "type": "imagegroup",
+      "images": [
+        {
+          "src": "https://picsum.photos/seed/ship1/1200/800",
+          "alt": "Coast Guard vessel departing harbor",
+          "caption": "The rescue vessel CG-47 departing from port at 6:30 AM as storm conditions began to intensify.",
+          "credit": "Photo: Coast Guard Public Affairs / Dan M. Brown",
+          "layout": "third"
+        },
+        {
+          "src": "https://picsum.photos/seed/command/1200/800",
+          "alt": "Operations command center",
+          "caption": "Operations commander Sarah Mitchell coordinating the rescue efforts from the coastal command center.",
+          "credit": "Photo: Maritime Emergency Services / Sarah Johnson",
+          "layout": "third"
+        },
+        {
+          "src": "https://picsum.photos/seed/helicopter/1200/800",
+          "alt": "Rescue helicopter in flight",
+          "caption": "Coast Guard helicopter MH-65 Dolphin providing aerial support during the search and rescue operation.",
+          "credit": "Photo: Aviation Unit / Michael Chen",
+          "layout": "third"
+        },
+        {
+          "src": "https://picsum.photos/seed/radar/1200/800",
+          "alt": "Radar tracking system",
+          "caption": "Advanced radar systems helped locate the distressed vessel despite poor visibility conditions.",
+          "credit": "Photo: Technical Operations / Lisa Martinez",
+          "layout": "superfull"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": "<p>The rescue mission lasted approximately three hours, with teams battling wind speeds exceeding 80 kilometers per hour and waves reaching heights of over 4 meters. Despite the challenging conditions, all crew members were successfully brought to shore without serious injuries.</p>"
+    },
+    {
+      "type": "pullquote",
+      "text": "We had to locate the floating object within 15 minutes, or the current would carry it beyond our operational range. Every second counted.",
+      "attribution": "— Commander Sarah Mitchell, Coast Guard"
+    },
+    {
+      "type": "paragraph",
+      "content": "<p>Coast Guard Commander Sarah Mitchell described the operation as one of the most challenging in recent years. \"The combination of high winds, poor visibility, and rough seas created an extremely dangerous situation for both the victims and our rescue teams,\" she explained during a press briefing.</p>"
+    },
+    {
+      "type": "scrollytelling",
+      "backgroundImages": [
+        "https://picsum.photos/1920/1080?random=1",
+        "https://picsum.photos/1920/1080?random=2",
+        "https://picsum.photos/1920/1080?random=3",
+        "https://picsum.photos/1920/1080?random=4",
+        "https://picsum.photos/1920/1080?random=5",
+        "https://picsum.photos/1920/1080?random=6"
+      ],
+      "textBlocks": [
+        {
+          "content": "<p>Tucked away inside the Australian War Memorial, beneath thousands of names of the fallen, among weapons and mementos from past conflicts, is a mosaic.</p>"
+        },
+        {
+          "content": "<p>The Shellal Mosaic, made up of broken, faded pieces, depicting animals and winding grapevines, isn't nearly as eye-catching or as grand as the war museum's many other displays.</p>"
+        },
+        {
+          "content": "<p>But this mosaic is one of the most controversial artworks in Australia.</p>"
+        },
+        {
+          "content": "<p>这件马赛克作品见证了历史的变迁...</p>"
+        },
+        {
+          "content": "<p>从1917年的战场到2025年的博物馆...</p>"
+        },
+        {
+          "content": "<p>它的故事仍在继续。</p>"
+        }
+      ],
+      "height": "500vh"
+    },
+    {
+      "type": "imagegroup",
+      "images": [
+        {
+          "src": "https://picsum.photos/seed/rescue1/1200/800",
+          "alt": "Survivors being brought ashore",
+          "caption": "Rescued crew members being safely brought to shore after the three-hour operation.",
+          "credit": "Photo: Emergency Medical Services / Emily Rodriguez",
+          "layout": "half"
+        },
+        {
+          "src": "https://picsum.photos/seed/medic/1200/800",
+          "alt": "Medical team providing care",
+          "caption": "Emergency medical personnel providing immediate care to rescued individuals at the dock.",
+          "credit": "Photo: Emergency Services / Mark Thompson",
+          "layout": "half"
+        },
+        {
+          "src": "https://picsum.photos/seed/blanket/1200/800",
+          "alt": "Survivors wrapped in thermal blankets",
+          "caption": "Survivors receiving thermal blankets and hot beverages as part of immediate care protocols.",
+          "credit": "Photo: Harbor Medical Unit / James Wilson",
+          "layout": "default"
+        },
+        {
+          "src": "https://picsum.photos/seed/memorial/1200/800",
+          "alt": "Commemorative photo of rescue team",
+          "caption": "A commemorative photo of all personnel involved in the successful rescue operation, taken at the Coast Guard station.",
+          "credit": "Photo: Official Coast Guard Photographer / David Lee",
+          "layout": "default"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": "<p>Local authorities praised the professionalism and swift response of the rescue teams. Mayor Jennifer Walsh stated that the successful operation has been cited as an example of effective emergency response coordination between multiple agencies including the Coast Guard, Harbor Patrol, and Emergency Medical Services.</p>"
+    },
+    {
+      "type": "paragraph",
+      "content": "<p>The rescued vessel, a 45-foot fishing boat named \"Sea Spirit,\" had departed from the harbor early Wednesday evening for what was supposed to be a routine overnight fishing trip. Weather conditions deteriorated rapidly overnight, catching the six-person crew off guard.</p>"
+    },
+    {
+      "type": "imagegroup",
+      "images": [
+        {
+          "src": "https://picsum.photos/seed/boat1/1200/800",
+          "alt": "Damaged fishing vessel",
+          "caption": "The fishing vessel 'Sea Spirit' showing damage sustained during the storm.",
+          "credit": "Photo: Maritime Inspection Unit / Robert Taylor"
+        },
+        {
+          "src": "https://picsum.photos/seed/hull/1200/800",
+          "alt": "Hull damage close-up",
+          "caption": "Close-up view of hull damage caused by repeated impact with high waves.",
+          "credit": "Photo: Vessel Safety Inspector / Karen White"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": "<p>Maritime safety experts are now reviewing the incident to identify any lessons that could improve future response protocols. Preliminary findings suggest that earlier weather warnings and improved communication systems could help prevent similar situations in the future.</p>"
+    },
+    {
+      "type": "imagegroup",
+      "images": [
+        {
+          "src": "https://picsum.photos/seed/equipment1/1200/800",
+          "alt": "Rescue equipment display",
+          "caption": "Specialized rescue equipment including thermal imaging devices, rescue ropes, and communication systems used during the operation.",
+          "credit": "Photo: Coast Guard Training Division / Robert Lee",
+          "layout": "default"
+        },
+        {
+          "src": "https://picsum.photos/seed/training1/1200/800",
+          "alt": "Training session",
+          "caption": "Team members during post-operation training review, analyzing what went right and areas for improvement.",
+          "credit": "Photo: Training Unit / Sarah Wilson"
+        },
+        {
+          "src": "https://picsum.photos/seed/briefing/1200/800",
+          "alt": "Safety briefing",
+          "caption": "Commander Mitchell conducting a safety briefing with team members after the successful mission.",
+          "credit": "Photo: Media Office / David Chen"
+        },
+        {
+          "src": "https://picsum.photos/seed/equipment2/1200/800",
+          "alt": "Life-saving equipment check",
+          "caption": "Crew members inspecting and maintaining life-saving equipment following standard post-mission protocols.",
+          "credit": "Photo: Equipment Maintenance / Tom Anderson"
+        },
+        {
+          "src": "https://picsum.photos/seed/radio/1200/800",
+          "alt": "Communication equipment",
+          "caption": "Advanced communication equipment that proved crucial in coordinating the multi-team rescue effort.",
+          "credit": "Photo: Communications Division / Lisa Park"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": "<p>The successful rescue operation serves as a powerful reminder of the dedication and bravery of emergency response teams who put their lives at risk to save others. Training exercises will be conducted in the coming weeks to further prepare teams for similar scenarios, with special emphasis on extreme weather conditions.</p>"
+    },
+    {
+      "type": "imagegroup",
+      "images": [
+        {
+          "src": "https://picsum.photos/seed/sunset1/1200/800",
+          "alt": "Coast Guard station at dusk",
+          "caption": "The Coast Guard station at dusk, shortly after the successful completion of the rescue mission.",
+          "credit": "Photo: Station Photographer / Alex Rivera"
+        },
+        {
+          "src": "https://picsum.photos/seed/flag/1200/800",
+          "alt": "Coast Guard flag",
+          "caption": "The Coast Guard flag flying at the station, symbolizing the service's commitment to saving lives at sea.",
+          "credit": "Photo: Public Affairs / Michelle Garcia"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": "<p>Captain Richard Morrison, District Commander, announced that all six rescued crew members have been released from medical care and are in good health. \"This outcome represents the very best of what our Coast Guard teams train for every day,\" Morrison stated in a formal press release.</p>"
+    },
+    {
+      "type": "image",
+      "src": "https://upload.wikimedia.org/wikipedia/commons/2/2c/Rotating_earth_%28large%29.gif",
+      "alt": "旋转的地球",
+      "caption": "来自维基百科的 GIF",
+      "layout": "default"
+    },
+    {
+      "type": "image",
+      "src": "https://cdn.pixabay.com/animation/2022/11/08/05/59/05-59-14-685_512.gif",
+      "alt": "water",
+      "caption": "superfull test",
+      "layout": "superfull"
+    },
+    {
+      "type": "paragraph",
+      "content": "<p>The vessel owner, Captain Frank Sullivan, expressed his gratitude to the rescue teams: \"I cannot thank these brave men and women enough. They risked their own safety to save my crew. We are forever grateful to the Coast Guard and all emergency responders involved.\"</p>"
+    },
+    {
+      "type": "imagegroup",
+      "images": [
+        {
+          "src": "https://picsum.photos/seed/reunion1/1200/800",
+          "alt": "Family reunion at harbor",
+          "caption": "Emotional reunions as rescued crew members meet their families at the harbor.",
+          "credit": "Photo: Local News / Patricia Moore"
+        },
+        {
+          "src": "https://picsum.photos/seed/hug/1200/800",
+          "alt": "Crew member embracing family",
+          "caption": "First Mate John Stevens embracing his wife and children moments after arriving safely at shore.",
+          "credit": "Photo: Community Reporter / Brian Foster"
+        },
+        {
+          "src": "https://picsum.photos/seed/crowd/1200/800",
+          "alt": "Community gathering",
+          "caption": "Local community members gathered at the harbor to welcome the rescued crew and thank the rescue teams.",
+          "credit": "Photo: Harbor Authority / Susan Clark"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": "<p>This incident has renewed discussions about maritime safety regulations and the importance of adequate funding for Coast Guard operations. Local representatives have pledged to review current safety protocols and allocate additional resources for emergency response capabilities.</p>"
+    }
+  ]
+}
