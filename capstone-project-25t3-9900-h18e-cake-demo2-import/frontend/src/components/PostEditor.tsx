@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { getApiBase } from '../lib/fetcher';
 import HeroEditForm from './HeroEditForm'; // <— 新增：使用独立的 Hero 弹窗表单
+import ImageEditForm from './ImageEditForm';
 
 /* =========================================================
    通用：API 基址与请求工具（带 ngrok 绕过头）
@@ -180,7 +181,7 @@ type ImageData = {
   layout?: 'default' | 'third' | 'inline';
 };
 
-function ImageEditForm({
+function SimpleImageForm({
   value,
   onChange,
 }: {
@@ -444,7 +445,7 @@ function SectionTypeForm({
         <ParagraphEditForm value={dataObj as ParagraphData} onChange={setDataObj} />
       )}
       {type === 'image' && (
-        <ImageEditForm value={dataObj as ImageData} onChange={setDataObj} />
+        <SimpleImageForm value={dataObj as ImageData} onChange={setDataObj} />
       )}
       {type === 'imagegroup' && (
         <ImageGroupEditForm value={dataObj as ImageGroupData} onChange={setDataObj} />
@@ -694,6 +695,23 @@ export default function PostEditor({
         </div>
       )}
 
+      {/* image 弹窗 */}
+      {imageEditing && (
+        <div className="modal-backdrop">
+          <div className="modal-card">
+            <ImageEditForm
+              section={imageEditing}
+              onSuccess={async () => {
+                setImageEditing(null);
+                await refresh(true);
+                onSectionsUpdated?.();
+              }}
+              onCancel={() => setImageEditing(null)}
+            />
+          </div>
+        </div>
+      )}
+
       {/* 通用编辑（非 hero） */}
       {editing && (
         <EditSectionForm
@@ -731,7 +749,16 @@ export default function PostEditor({
               <div className="summary">{summary}</div>
               <div className="row">
                 {/* <button onClick={() => setEditing(s)}>Edit</button> */}
-                 <button onClick={() => s.type === 'hero' ? setHeroEditing(s) : setEditing(s)}>Edit</button>
+                 {/* <button onClick={() => s.type === 'hero' ? setHeroEditing(s) : setEditing(s)}>Edit</button> */}
+                <button
+                  onClick={() => {
+                    if (s.type === 'hero') setHeroEditing(s);
+                    else if (s.type === 'image') setImageEditing(s);
+                    else setEditing(s);
+                  }}
+                >
+                  Edit
+                </button>
                 <button className="danger" onClick={() => handleDelete(s.id)}>
                   Delete
                 </button>
