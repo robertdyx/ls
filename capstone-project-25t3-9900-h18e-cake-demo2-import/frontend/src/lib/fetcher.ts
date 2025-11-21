@@ -1,119 +1,81 @@
 // frontend/src/lib/fetcher.ts
 
-type SectionPayload = {
-  type: string;
-  data?: any;
-  sort_order?: number;
-};
+// 读取后端基地址：优先取 ?api=，其次取 .env 的 VITE_API_BASE
+export function getApiBase(): string {
+  try {
+    const u = new URL(window.location.href);
+    const api = u.searchParams.get('api');
+    if (api) {
+      // 允许已编码/未编码两种情况
+      try {
+        return decodeURIComponent(api);
+      } catch {
+        return api;
+      }
+    }
+  } catch {
+    /* noop */
+  }
+  // 兜底到环境变量（本地开发可用）
+  const envBase = (import.meta as any)?.env?.VITE_API_BASE;
+  return (envBase as string) || "";
+}
 
-type Section = {
-  id: number;
-  type: string;
-  data: any;
-  sort_order: number;
-  story_id: number;
-};
+// 统一的 JSON 请求封装（自动拼接 base、自动报 JSON 解析错误）
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const base = getApiBase();
+  const url = base ? `${base.replace(/\/$/, "")}${path}` : path;
 
-type Story = {
-  id?: number;
-  version?: string;
-  title: string;
-  standfirst?: string;
-  theme?: {
-    font?: string;
-    primaryColor?: string;
-  };
+  const res = await fetch(url, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...(init?.headers ?? {}),
+    },
+  });
+
+  const text = await res.text();
+
+  // 后端必须返回 JSON；若返回了 HTML/纯文本，这里抛出直观错误（你之前页面上的 “Expect JSON but got text/html …”）
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    const ct = res.headers.get("content-type") || "unknown";
+    throw new Error(`Expect JSON but got ${ct}. Body: ${text.slice(0, 200)}`);
+  }
+}
+
+/** ======== 下面是前端现用到的 API ========= **/
+
+export type Story = {
+  // 只列你页面真实用到的字段即可；若还有字段，按需补充
   sections: any[];
 };
 
-function normalizeBase(base: string | null | undefined): string {
-  if (!base) return "";
-  // 去掉最后的 /，防止出现 //story 之类
-  return base.replace(/\/+$/, "");
-}
+// 读取整篇 story（用于首页显示 & 右侧编辑器同步）
+export const fetchStory = () => request<Story>("/story");
 
-export function getApiBaseFromLocation(): string {
-  const qs = new URLSearchParams(window.location.search);
-  const api = qs.get("api");
-  return normalizeBase(api);
-}
+// 侧栏列表
+export const fetchSections = () => request<any[]>("/sections");
 
-async function fetchJSON(input: RequestInfo | URL, init?: RequestInit) {
-  const res = await fetch(input, init);
-  const ctype = res.headers.get("content-type") || "";
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`HTTP ${res.status}: ${text}`);
-  }
-  // 服务器必须返回 JSON；否则就把文本错误抛出来（上次的 “<!DOCTYPE …” 就能被识别）
-  if (!ctype.includes("application/json")) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`Expect JSON but got ${ctype}. Body: ${text.slice(0, 200)}`);
-  }
-  return res.json();
-}
+// 新增分段
+export const createSection = (payload: any) =>
+  request<any>("/sections", { method: "POST", body: JSON.stringify(payload) });
 
-function urlJoin(base: string, path: string) {
-  if (!base) return path; // 同源（本地开发或 gh-pages 同仓库反向代理）
-  if (!path.startsWith("/")) path = "/" + path;
-  return base + path;
-}
-
-/** 优先请求 /story；失败时兜底到 /story.json（保证只读也能展示） */
-export async function fetchStory(apiBase?: string): Promise<Story> {
-  const base = normalizeBase(apiBase ?? getApiBaseFromLocation());
-  try {
-    return await fetchJSON(urlJoin(base, "/story"), { credentials: "omit" });
-  } catch {
-    return await fetchJSON(urlJoin(base, "/story.json"), { credentials: "omit" });
-  }
-}
-
-export async function listSections(apiBase?: string): Promise<Section[]> {
-  const base = normalizeBase(apiBase ?? getApiBaseFromLocation());
-  return fetchJSON(urlJoin(base, "/sections"));
-}
-
-export async function createSection(
-  storyId: number,
-  payload: SectionPayload,
-  apiBase?: string
-): Promise<Section> {
-  const base = normalizeBase(apiBase ?? getApiBaseFromLocation());
-  const body = { ...payload };
-  const qs = new URLSearchParams({ story_id: String(storyId) });
-  return fetchJSON(urlJoin(base, `/sections?${qs.toString()}`), {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
-}
-
-export async function updateSection(
-  sectionId: number,
-  patch: Partial<SectionPayload>,
-  apiBase?: string
-): Promise<Section> {
-  const base = normalizeBase(apiBase ?? getApiBaseFromLocation());
-  return fetchJSON(urlJoin(base, `/sections/${sectionId}`), {
+// 更新分段
+export const updateSection = (id: number | string, payload: any) =>
+  request<any>(`/sections/${id}`, {
     method: "PATCH",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(patch),
+    body: JSON.stringify(payload),
   });
-}
 
-export async function deleteSection(sectionId: number, apiBase?: string) {
-  const base = normalizeBase(apiBase ?? getApiBaseFromLocation());
-  return fetchJSON(urlJoin(base, `/sections/${sectionId}`), { method: "DELETE" });
-}
+// 删除分段
+export const deleteSection = (id: number | string) =>
+  request<any>(`/sections/${id}`, { method: "DELETE" });
 
-// 兼容默认导出 & 具名导出两种引入方式
-const api = {
-  getApiBaseFromLocation,
-  fetchStory,
-  listSections,
-  createSection,
-  updateSection,
-  deleteSection,
-};
-export default api;
+// 导入整篇 story（你页面上的 Import Data 按钮）
+export const importStory = (payload: any) =>
+  request<any>("/import/story_merged", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
