@@ -15,11 +15,16 @@ app = FastAPI(title="Posts Backend", version="1.0.0")
 # CORS：gh-pages / ngrok / 本地都能请求
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 如需收敛到你的 gh-pages / ngrok 域名可改成白名单
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=[
+        "https://robertdyx.github.io",   # 你的 GitHub Pages 域
+    allow_origin_regex=r"https://.*\.github\.io",  # 可选：放宽到任意 *.github.io
+    allow_credentials=False,  # 你没用 cookie/凭证就设 False，便于使用通配
+    allow_methods=["*"],      # 允许所有方法（含预检需要的 OPTIONS）
+    allow_headers=["*"],      # 允许所有头
 )
+
+# --- end CORS ---
+
 
 backend_dir = Path(__file__).resolve().parent
 project_root = backend_dir.parent
