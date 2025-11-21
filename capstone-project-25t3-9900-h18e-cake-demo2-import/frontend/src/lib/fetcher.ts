@@ -1,94 +1,122 @@
-// src/lib/fetcher.ts
+// frontend/src/lib/fetcher.ts
 type Section = {
-  id: number;
+  id: string | number;
   type: string;
   title?: string;
   content?: string;
+  media?: any;
   order?: number;
+  [k: string]: any;
 };
+
 type Story = {
-  id: number;
-  title: string;
+  id?: string | number;
+  title?: string;
+  summary?: string;
   sections: Section[];
+  [k: string]: any;
 };
 
-// 1) 从 URL ?api= 读取后端根地址，去掉尾部斜杠
-const params = new URLSearchParams(window.location.search);
-const apiFromQuery = params.get("api");
-export const API_BASE = apiFromQuery
-  ? decodeURIComponent(apiFromQuery).replace(/\/+$/, "")
-  // 本地开发兜底（vite 本地跑时没有 ?api= 也能用）
-  : "http://localhost:8888";
+// 取 API Base：优先当前页面的 ?api=，其次父级 iframe 的 ?api=，最后回退到本地
+function resolveApiBase(): string {
+  const getApi = (loc: Location | null): string | null => {
+    if (!loc) return null;
+    const u = new URL(loc.href);
+    const v = u.searchParams.get('api');
+    return v && v.trim() ? decodeURIComponent(v) : null;
+  };
 
-// 统一的取 JSON + 抛错
-async function jsonOrThrow<T>(res: Response): Promise<T> {
-  if (!res.ok) {
-    const txt = await res.text().catch(() => "");
-    throw new Error(`HTTP ${res.status}: ${txt || res.statusText}`);
+  // 1) 先看当前文档
+  let base = getApi(window.location);
+
+  // 2) 如果是被 iframe 嵌入，且当前没拿到，再看父窗口
+  if (!base) {
+    try {
+      base = getApi(window.parent?.location ?? null);
+    } catch {
+      // 跨域拿不到父窗口也没关系
+    }
   }
-  // 保护：后端若返回 text/html（比如 404 页面），避免 JSON.parse 报 '<'
-  const ct = res.headers.get("content-type") || "";
-  if (!ct.includes("application/json")) {
-    const snippet = (await res.text().catch(() => "")).slice(0, 120);
-    throw new Error(`Expect JSON but got ${ct || "unknown"}: ${snippet}`);
+
+  // 3) 兜底：本地开发
+  if (!base) base = window.location.origin;
+
+  // 4) 规整：去掉末尾 / 与端口加斜杠问题
+  return base.replace(/\/+$/, '');
+}
+
+const API_BASE = resolveApiBase();
+
+async function fetchJSON<T>(path: string, init?: RequestInit): Promise<T> {
+  const url = `${API_BASE}${path.startsWith('/') ? '' : '/'}${path}`;
+  const res = await fetch(url, {
+    credentials: 'omit',
+    mode: 'cors',
+    headers: {
+      'Accept': 'application/json',
+      ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.headers || {}),
+    },
+    ...init,
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`HTTP ${res.status} ${res.statusText} @ ${url}\n${text}`);
+  }
+
+  const ct = res.headers.get('content-type') || '';
+  if (!ct.includes('application/json')) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Expect JSON but got ${ct}. Body: ${text.slice(0, 200)}`);
   }
   return res.json() as Promise<T>;
 }
 
-// ---- API 封装 ----
-export async function fetchStory(): Promise<Story> {
-  const res = await fetch(`${API_BASE}/story`, {
-    method: "GET",
-    mode: "cors",
-  });
-  const data = await jsonOrThrow<Story>(res);
-  // 防御：保证 sections 一定是数组
-  if (!data || !Array.isArray(data.sections)) {
-    data.sections = [];
-  }
-  return data;
+// ====== 业务 API ======
+export async function healthz(): Promise<{ ok: boolean }> {
+  return fetchJSON('/healthz');
 }
 
-export async function fetchSections(): Promise<Section[]> {
-  const res = await fetch(`${API_BASE}/sections`, { method: "GET", mode: "cors" });
-  const data = await jsonOrThrow<Section[]>(res);
-  return Array.isArray(data) ? data : [];
+export async function fetchStory(): Promise<Story> {
+  // 允许后端 /story 返回 { sections: [] } / 完整 story
+  const data = await fetchJSON<Partial<Story>>('/story');
+  return {
+    title: data.title ?? '',
+    summary: data.summary ?? '',
+    sections: Array.isArray(data.sections) ? data.sections : [],
+    ...data,
+  } as Story;
+}
+
+export async function listSections(): Promise<Section[]> {
+  const list = await fetchJSON<any[]>('/sections');
+  return Array.isArray(list) ? list : [];
 }
 
 export async function createSection(payload: Partial<Section>): Promise<Section> {
-  const res = await fetch(`${API_BASE}/sections`, {
-    method: "POST",
-    mode: "cors",
-    headers: { "content-type": "application/json" },
+  return fetchJSON('/sections', {
+    method: 'POST',
     body: JSON.stringify(payload),
   });
-  return jsonOrThrow<Section>(res);
 }
 
-export async function updateSection(id: number, payload: Partial<Section>): Promise<Section> {
-  const res = await fetch(`${API_BASE}/sections/${id}`, {
-    method: "PATCH",
-    mode: "cors",
-    headers: { "content-type": "application/json" },
+export async function updateSection(id: string | number, payload: Partial<Section>): Promise<Section> {
+  return fetchJSON(`/sections/${id}`, {
+    method: 'PATCH',
     body: JSON.stringify(payload),
   });
-  return jsonOrThrow<Section>(res);
 }
 
-export async function deleteSection(id: number): Promise<{ ok: true }> {
-  const res = await fetch(`${API_BASE}/sections/${id}`, {
-    method: "DELETE",
-    mode: "cors",
-  });
-  await jsonOrThrow<any>(res);
-  return { ok: true };
+export async function deleteSection(id: string | number): Promise<{ ok: boolean }> {
+  return fetchJSON(`/sections/${id}`, { method: 'DELETE' });
 }
 
-// 兼容老代码的默认导出（若其它文件用到了 default）
+// 兼容老代码：默认导出一个对象
 export default {
-  API_BASE,
+  healthz,
   fetchStory,
-  fetchSections,
+  listSections,
   createSection,
   updateSection,
   deleteSection,
