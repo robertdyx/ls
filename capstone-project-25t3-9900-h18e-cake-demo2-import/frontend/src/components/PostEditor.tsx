@@ -777,6 +777,8 @@ button.danger{color:#b00020;border-color:#f3c2c2}
 .type{font-weight:600}
 .json-preview{background:#0b1020;color:#cad3ff;border-radius:8px;padding:8px;overflow:auto}
 .footer-space{height:32px}
+.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;z-index:9990}
+.modal-card{background:#fff;border-radius:14px;max-width:860px;width:94vw;max-height:90vh;overflow:auto;box-shadow:0 10px 30px rgba(0,0,0,.25);padding:8px}
 `;
 if (typeof document !== 'undefined' && !document.getElementById('pe-lite-style')) {
   const el = document.createElement('style');
