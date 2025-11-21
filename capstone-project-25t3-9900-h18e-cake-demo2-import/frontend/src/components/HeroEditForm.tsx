@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Section } from '../lib/types';
+import { getApiBase } from '../lib/fetcher'; // 使用统一的 API 基址工具
 import './HeroEditForm.css';
 
 interface HeroEditFormProps {
@@ -8,10 +9,17 @@ interface HeroEditFormProps {
   onCancel: () => void;
 }
 
-const API_BASE_URL = (function () {
-  const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-  return isLocalhost ? 'http://localhost:8888' : `${window.location.protocol}//${window.location.hostname}:8888`;
-})();
+// const API_BASE_URL = (function () {
+//   const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+//   return isLocalhost ? 'http://localhost:8888' : `${window.location.protocol}//${window.location.hostname}:8888`;
+// })();
+
+const API_BASE_URL = getApiBase();
+const JSON_HEADERS = {
+  'Content-Type': 'application/json',
+  'ngrok-skip-browser-warning': '1',
+  'x-requested-with': 'fetch',
+} as const;
 
 export default function HeroEditForm({ section, onSuccess, onCancel }: HeroEditFormProps) {
   let initialData: any = { type: 'hero' };
@@ -87,7 +95,8 @@ export default function HeroEditForm({ section, onSuccess, onCancel }: HeroEditF
     try {
       const response = await fetch(`${API_BASE_URL}/sections/${section.id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: JSON_HEADERS,
+        // headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           type: 'hero',
           data: JSON.stringify(formData),
@@ -95,7 +104,9 @@ export default function HeroEditForm({ section, onSuccess, onCancel }: HeroEditF
       });
 
       if (!response.ok) {
-        throw new Error('Failed to update hero block');
+        const txt = await response.text();
+        throw new Error(`Failed to update hero block: ${response.status} ${response.statusText} – ${txt.slice(0,200)}`);
+        // throw new Error('Failed to update hero block');
       }
 
       alert('Hero block updated!');
