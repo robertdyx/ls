@@ -16,12 +16,13 @@ app = FastAPI(title="Posts Backend", version="1.0.0")
 
 allow_origins=[
         "https://robertdyx.github.io",   # 你的 GitHub Pages 域
-        # "http://localhost:5173",         # 本地vite调试（可选）
-        # "http://127.0.0.1:5173",
+        "http://localhost:5173",         # 本地vite调试（可选）
+        "http://127.0.0.1:5173",
         "*"                              # 临时放开，若想更严谨可去掉这一行
     ]
 
-ALLOW_ORIGIN_REGEX = r"https://([a-z0-9-]+\.)*ngrok-free\.dev$"
+# ALLOW_ORIGIN_REGEX = r"https://([a-z0-9-]+\.)*ngrok-free\.dev$"
+ALLOW_ORIGIN_REGEX = r"https://([a-z0-9-]+\.)*(github\.io|ngrok-free\.dev)$""
 
 # CORS：gh-pages / ngrok / 本地都能请求
 app.add_middleware(
@@ -29,9 +30,9 @@ app.add_middleware(
     allow_origins=allow_origins,
     allow_origin_regex=ALLOW_ORIGIN_REGEX,  # 可选：放宽到任意 *.github.io
     allow_credentials=False,  # 你没用 cookie/凭证就设 False，便于使用通配
-    allow_methods=["GET", "HEAD", "OPTIONS", "POST", "PATCH", "DELETE"],      # 允许所有方法（含预检需要的 OPTIONS）
-    allow_headers=["*"],      # 允许所有头
-    # expose_headers=["*"],             # 可选：前端若需读取自定义响应头
+    allow_methods=["*"],      # 允许所有方法（含预检需要的 OPTIONS）
+    allow_headers=["*", "ngrok-skip-browser-warning", "x-requested-with"],      # 允许所有头
+    expose_headers=["content-type"],             # 可选：前端若需读取自定义响应头
     max_age=86400, 
 )
 
