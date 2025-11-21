@@ -1,49 +1,56 @@
 // frontend/src/lib/fetcher.ts
 
-// 读取后端基地址：优先取 ?api=，其次取 .env 的 VITE_API_BASE
+// frontend/src/lib/fetcher.ts
+// 读取后端根地址：优先 URL ?api=，其次 localStorage.apiBase
 export function getApiBase(): string {
-  try {
-    const u = new URL(window.location.href);
-    const api = u.searchParams.get('api');
-    if (api) {
-      // 允许已编码/未编码两种情况
-      try {
-        return decodeURIComponent(api);
-      } catch {
-        return api;
-      }
-    }
-  } catch {
-    /* noop */
+  const url = new URL(window.location.href);
+  const fromQuery = url.searchParams.get('api');
+  const api = (fromQuery || localStorage.getItem('apiBase') || '').trim();
+
+  if (fromQuery) {
+    // 把 ?api= 保存一下，刷新后仍可用
+    localStorage.setItem('apiBase', fromQuery);
   }
-  // 兜底到环境变量（本地开发可用）
-  const envBase = (import.meta as any)?.env?.VITE_API_BASE;
-  return (envBase as string) || "";
+
+  if (!api) throw new Error('No API base provided. Append ?api=<backend_root> to the URL.');
+  return api.replace(/\/+$/, ''); // 去掉结尾斜线
 }
 
-// 统一的 JSON 请求封装（自动拼接 base、自动报 JSON 解析错误）
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function doFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const base = getApiBase();
-  const url = base ? `${base.replace(/\/$/, "")}${path}` : path;
-
-  const res = await fetch(url, {
-    ...init,
+  const resp = await fetch(`${base}${path}`, {
+    method: 'GET',
+    mode: 'cors',
+    credentials: 'omit',
+    cache: 'no-store',
     headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers ?? {}),
+      'Accept': 'application/json',
     },
+    ...init,
   });
 
-  const text = await res.text();
+  if (!resp.ok) {
+    const txt = await resp.text().catch(() => '');
+    throw new Error(`Request failed ${resp.status}: ${txt || resp.statusText}`);
+  }
+  return resp.json() as Promise<T>;
+}
 
-  // 后端必须返回 JSON；若返回了 HTML/纯文本，这里抛出直观错误（你之前页面上的 “Expect JSON but got text/html …”）
+// 读取 story（后端 /story 或 /story.json 都可以，这里优先 /story）
+export async function fetchStory(): Promise<any> {
   try {
-    return JSON.parse(text) as T;
+    return await doFetch<any>('/story');
   } catch {
-    const ct = res.headers.get("content-type") || "unknown";
-    throw new Error(`Expect JSON but got ${ct}. Body: ${text.slice(0, 200)}`);
+    // 某些代理可能只放行 .json，兜底再试 /story.json
+    return await doFetch<any>('/story.json');
   }
 }
+
+export default {
+  getApiBase,
+  fetchStory,
+};
+
 
 /** ======== 下面是前端现用到的 API ========= **/
 
