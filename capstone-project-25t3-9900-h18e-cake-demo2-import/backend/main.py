@@ -25,7 +25,7 @@ ALLOW_ORIGIN_REGEX = r"https://([a-z0-9-]+\.)*ngrok-free\.dev$"
 # CORS：gh-pages / ngrok / 本地都能请求
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allow_origins
+    allow_origins=allow_origins,
     allow_origin_regex=ALLOW_ORIGIN_REGEX,  # 可选：放宽到任意 *.github.io
     allow_credentials=False,  # 你没用 cookie/凭证就设 False，便于使用通配
     allow_methods=["*"],      # 允许所有方法（含预检需要的 OPTIONS）
