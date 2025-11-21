@@ -54,35 +54,35 @@ export default {
 
 /** ======== 下面是前端现用到的 API ========= **/
 
-export type Story = {
-  // 只列你页面真实用到的字段即可；若还有字段，按需补充
-  sections: any[];
-};
+// export type Story = {
+//   // 只列你页面真实用到的字段即可；若还有字段，按需补充
+//   sections: any[];
+// };
 
-// 读取整篇 story（用于首页显示 & 右侧编辑器同步）
-export const fetchStory = () => request<Story>("/story");
+// // 读取整篇 story（用于首页显示 & 右侧编辑器同步）
+// export const fetchStory = () => request<Story>("/story");
 
-// 侧栏列表
-export const fetchSections = () => request<any[]>("/sections");
+// // 侧栏列表
+// export const fetchSections = () => request<any[]>("/sections");
 
-// 新增分段
-export const createSection = (payload: any) =>
-  request<any>("/sections", { method: "POST", body: JSON.stringify(payload) });
+// // 新增分段
+// export const createSection = (payload: any) =>
+//   request<any>("/sections", { method: "POST", body: JSON.stringify(payload) });
 
-// 更新分段
-export const updateSection = (id: number | string, payload: any) =>
-  request<any>(`/sections/${id}`, {
-    method: "PATCH",
-    body: JSON.stringify(payload),
-  });
+// // 更新分段
+// export const updateSection = (id: number | string, payload: any) =>
+//   request<any>(`/sections/${id}`, {
+//     method: "PATCH",
+//     body: JSON.stringify(payload),
+//   });
 
-// 删除分段
-export const deleteSection = (id: number | string) =>
-  request<any>(`/sections/${id}`, { method: "DELETE" });
+// // 删除分段
+// export const deleteSection = (id: number | string) =>
+//   request<any>(`/sections/${id}`, { method: "DELETE" });
 
-// 导入整篇 story（你页面上的 Import Data 按钮）
-export const importStory = (payload: any) =>
-  request<any>("/import/story_merged", {
-    method: "POST",
+// // 导入整篇 story（你页面上的 Import Data 按钮）
+// export const importStory = (payload: any) =>
+//   request<any>("/import/story_merged", {
+//     method: "POST",
     body: JSON.stringify(payload),
   });
