@@ -16,8 +16,8 @@ app = FastAPI(title="Posts Backend", version="1.0.0")
 
 allow_origins=[
         "https://robertdyx.github.io",   # 你的 GitHub Pages 域
-        "http://localhost:5173",         # 本地vite调试（可选）
-        "http://127.0.0.1:5173",
+        # "http://localhost:5173",         # 本地vite调试（可选）
+        # "http://127.0.0.1:5173",
         "*"                              # 临时放开，若想更严谨可去掉这一行
     ]
 
