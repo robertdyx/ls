@@ -1,60 +1,47 @@
+# backend/main.py
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from pathlib import Path, PurePosixPath
-import json
-import os
-import shutil
-import uuid
-import logging
+import json, os, shutil, logging
 import models, schemas, crud
 from database import SessionLocal, engine, Base
 
-# Create tables
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Posts Backend", version="1.0.0")
 
+# CORS：gh-pages / ngrok / 本地都能请求
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # 如需收敛到你的 gh-pages / ngrok 域名可改成白名单
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 backend_dir = Path(__file__).resolve().parent
 project_root = backend_dir.parent
 
-def _discover_default_story_path() -> Path:
-    """Locate a sensible default story.json when env var is not provided.
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
-    Preference order:
-      1. capstone-frontend/public/story.json inside the current project
-      2. capstone-frontend/public/story.json one directory above (GitHub Classroom root)
-      3. capstone-backend/public/story.json if it exists
-    """
-    candidate_public_dirs = [
-        project_root / "capstone-frontend" / "public",
-        project_root.parent / "capstone-frontend" / "public",
-        backend_dir / "public",
-    ]
+# ========== 健康检查 / 兼容 story.json / 友好根提示 ==========
+@app.get("/healthz")
+def health():
+    return {"ok": True}
 
-    for public_dir in candidate_public_dirs:
-        story_path = public_dir / "story.json"
-        if story_path.exists():
-            return story_path
+@app.get("/")
+def root():
+    return {"service": "Posts Backend", "hint": "Use /story, /story.json, /sections, /posts ..."}
 
-    for public_dir in candidate_public_dirs:
-        if public_dir.is_dir():
-            return public_dir / "story.json"
-
-    raise FileNotFoundError(
-        "Unable to locate story.json automatically. "
-        "Set STORY_JSON_PATH environment variable to the desired file."
-    )
-
-
-_default_story_json_path = _discover_default_story_path()
-STORY_JSON_PATH = Path(os.getenv("STORY_JSON_PATH", _default_story_json_path))
-PUBLIC_DIR = STORY_JSON_PATH.parent
-
-
-def build_story_payload(story: models.Story) -> dict:
-    """Assemble a story payload compatible with story.json."""
+# ========== story（读） ==========
+def _build_story_payload(story: models.Story) -> dict:
     payload = {
         "id": story.id,
         "version": story.version or "1.0",
@@ -66,83 +53,62 @@ def build_story_payload(story: models.Story) -> dict:
         },
         "sections": [],
     }
-
-    for section in story.sections:
-        raw_data = section.data or "{}"
+    for sec in story.sections:
         try:
-            parsed = json.loads(raw_data)
+            payload["sections"].append(json.loads(sec.data or "{}"))
         except json.JSONDecodeError:
-            parsed = {"type": section.type}
-        payload["sections"].append(parsed)
-
+            payload["sections"].append({"type": sec.type})
     return payload
 
-
-def sync_story_json(db: Session, story_id: int) -> None:
-    """Write the current story state back to story.json for static fallback."""
-    story = crud.get_story(db, story_id)
+@app.get("/story")
+def get_story(db: Session = Depends(get_db)):
+    story = crud.get_latest_story(db)
     if not story:
-        return
+        raise HTTPException(status_code=404, detail="No story found")
+    return _build_story_payload(story)
 
-    payload = build_story_payload(story)
-
-    if not STORY_JSON_PATH.exists():
-        logging.getLogger(__name__).warning(
-            "story.json not found at %s; skipping sync to avoid creating new files",
-            STORY_JSON_PATH,
-        )
-        return
-
-    try:
-        STORY_JSON_PATH.write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-    except OSError as exc:
-        logging.getLogger(__name__).warning("Failed to sync story.json: %s", exc)
-
-# CORS for Vite dev (5173) and local file preview
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-@app.get("/healthz")
-def health():
-    return {"ok": True}
-
-# 让老代码/静态脚手架也能工作：/story.json 返回同样的数据
 @app.get("/story.json")
-def story_json(db: Session = Depends(get_db)):
+def get_story_json(db: Session = Depends(get_db)):
+    # 和 /story 返回完全一致，方便静态页面兜底读取
     return get_story(db)
 
-# 可选：根路径给个提示，避免误以为这里是 JSON
-@app.get("/")
-def root():
-    return {
-        "service": "Posts Backend",
-        "message": "Use /story or /posts ... This root is not JSON data endpoint."
-    }
+# ========== sections（增删改查） ==========
+@app.get("/sections", response_model=List[schemas.SectionRead])
+def list_sections(story_id: Optional[int] = None, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    return crud.get_sections(db, story_id=story_id, skip=skip, limit=limit)
 
-
-@app.post("/posts", response_model=schemas.PostRead)
-def create_post(post: schemas.PostCreate, db: Session = Depends(get_db)):
-    created = crud.create_post(db, post)
+@app.post("/sections", response_model=schemas.SectionRead)
+def create_section(section: schemas.SectionCreate, story_id: int, db: Session = Depends(get_db)):
+    created = crud.create_section(db, section, story_id)
     return created
 
+@app.patch("/sections/{section_id}", response_model=schemas.SectionRead)
+def update_section(section_id: int, payload: dict, db: Session = Depends(get_db)):
+    updated = crud.update_section(
+        db, section_id,
+        section_type=payload.get("type"),
+        data=payload.get("data"),
+        sort_order=payload.get("sort_order"),
+    )
+    if not updated:
+        raise HTTPException(status_code=404, detail="Section not found")
+    return updated
+
+@app.delete("/sections/{section_id}")
+def delete_section(section_id: int, db: Session = Depends(get_db)):
+    story_id = crud.delete_section(db, section_id)
+    if story_id is None:
+        raise HTTPException(status_code=404, detail="Section not found")
+    return {"deleted": True, "id": section_id}
+
+# ========== posts（按需保留） ==========
 @app.get("/posts", response_model=List[schemas.PostRead])
 def list_posts(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     return crud.get_posts(db, skip=skip, limit=limit)
+
+@app.post("/posts", response_model=schemas.PostRead)
+def create_post(post: schemas.PostCreate, db: Session = Depends(get_db)):
+    return crud.create_post(db, post)
 
 @app.get("/posts/{post_id}", response_model=schemas.PostRead)
 def read_post(post_id: int, db: Session = Depends(get_db)):
@@ -151,7 +117,6 @@ def read_post(post_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Post not found")
     return post
 
-@app.put("/posts/{post_id}", response_model=schemas.PostRead)
 @app.patch("/posts/{post_id}", response_model=schemas.PostRead)
 def update_post(post_id: int, payload: schemas.PostUpdate, db: Session = Depends(get_db)):
     post = crud.update_post(db, post_id, payload)
@@ -166,290 +131,25 @@ def delete_post(post_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Post not found")
     return {"deleted": True, "id": post_id}
 
-# Sections CRUD API
-@app.get("/sections", response_model=List[schemas.SectionRead])
-def list_sections(story_id: Optional[int] = None, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    return crud.get_sections(db, story_id=story_id, skip=skip, limit=limit)
-
-@app.get("/sections/{section_id}", response_model=schemas.SectionRead)
-def read_section(section_id: int, db: Session = Depends(get_db)):
-    section = crud.get_section(db, section_id)
-    if not section:
-        raise HTTPException(status_code=404, detail="Section not found")
-    return section
-
-@app.post("/sections", response_model=schemas.SectionRead)
-def create_section(section: schemas.SectionCreate, story_id: int, db: Session = Depends(get_db)):
-    created = crud.create_section(db, section, story_id)
-    sync_story_json(db, created.story_id)
-    return created
-
-@app.patch("/sections/{section_id}", response_model=schemas.SectionRead)
-def update_section_endpoint(section_id: int, section_update: dict, db: Session = Depends(get_db)):
-    section = crud.update_section(
-        db, section_id,
-        section_type=section_update.get("type"),
-        data=section_update.get("data"),
-        sort_order=section_update.get("sort_order")
-    )
-    if not section:
-        raise HTTPException(status_code=404, detail="Section not found")
-    sync_story_json(db, section.story_id)
-    return section
-
-@app.delete("/sections/{section_id}")
-def delete_section_endpoint(section_id: int, db: Session = Depends(get_db)):
-    story_id = crud.delete_section(db, section_id)
-    if story_id is None:
-        raise HTTPException(status_code=404, detail="Section not found")
-    sync_story_json(db, story_id)
-    return {"deleted": True, "id": section_id}
-
-# Get full story data (compatible with story.json format)
-@app.get("/story")
-def get_story(db: Session = Depends(get_db)):
-    """获取完整的 story 数据（兼容 story.json 格式）"""
-    # 获取最新的 story
-    story = crud.get_latest_story(db)
-    if not story:
-        raise HTTPException(status_code=404, detail="No story found")
-
-    return build_story_payload(story)
-
-# Optional: Import story.json from the frontend and convert sections into posts
-@app.post("/import/story", response_model=List[schemas.PostRead])
-def import_story(frontend_root: Optional[str] = None, db: Session = Depends(get_db)):
-    # If not provided, assume /mnt/data/project/.../frontend/public/story.json in this environment
-    if not frontend_root:
-        frontend_root = "F:/work/edit-web/frontend/public"
-    story_path = Path(frontend_root) / "story.json"
-    if not story_path.exists():
-        raise HTTPException(status_code=404, detail=f"story.json not found at {story_path}")
-    story = json.loads(story_path.read_text(encoding="utf-8"))
-
-    results = []
-    # Strategy: one Post per section with all textual content, collect media URLs.
-    sections = story.get("sections", [])
-    for idx, sec in enumerate(sections):
-        media_list = []
-        text_blob = []
-
-        t = sec.get("type")
-        if t in ("paragraph",):
-            content = sec.get("content", "")
-            text_blob.append(content)
-        if t in ("pullquote",):
-            text_blob.append(sec.get("text", ""))
-            if sec.get("cite"):
-                text_blob.append(f"— {sec.get('cite')}")
-        if t in ("imagegif",):
-            src = sec.get("src")
-            if src:
-                media_list.append({"kind": "gif" if src.lower().endswith(('.gif')) else "image", "url": src, "caption": sec.get("caption"), "alt_text": sec.get("alt", ""), "credit": sec.get("credit", ""), "sort_order": 0})
-        if t in ("video",):
-            src = sec.get("src")
-            if src:
-                media_list.append({"kind": "video", "url": src, "caption": sec.get("caption"), "alt_text": sec.get("alt", ""), "credit": sec.get("credit", ""), "sort_order": 0})
-        if t in ("imagegroup",):
-            imgs = sec.get("images", [])
-            for i, im in enumerate(imgs):
-                media_list.append({"kind": "image", "url": im.get("src"), "caption": im.get("caption"), "alt_text": im.get("alt", ""), "credit": im.get("credit", ""), "sort_order": i})
-
-        title = story.get("title", f"Section {idx+1}")
-        content_joined = "\n\n".join([s for s in text_blob if s])
-
-        created = crud.create_post(db, schemas.PostCreate(
-            title=title,
-            content=content_joined or None,
-            media=[schemas.MediaCreate(**m) for m in media_list]
-        ))
-        results.append(created)
-
-    return results
-
-# Import story.json from uploaded file
-@app.post("/import/story_upload", response_model=schemas.StoryRead)
-async def import_story_upload(file: UploadFile = File(...), db: Session = Depends(get_db)):
-    """从上传的文件导入 story.json"""
-    try:
-        # 读取上传的文件
-        content = await file.read()
-        story_json = json.loads(content.decode('utf-8'))
-        
-        title = story_json.get("title") or "Story"
-        standfirst = story_json.get("standfirst") or ""
-        version = story_json.get("version", "1.0")
-        theme = story_json.get("theme", {})
-        theme_font = theme.get("font")
-        theme_primary_color = theme.get("primaryColor")
-        sections = story_json.get("sections", [])
-        
-        # 创建 SectionCreate 对象数组
-        section_creates = []
-        for i, section in enumerate(sections):
-            section_creates.append(schemas.SectionCreate(
-                type=section.get("type", "unknown"),
-                data=json.dumps(section, ensure_ascii=False),
-                sort_order=i
-            ))
-        
-        # 创建 Story
-        created = crud.create_story(db, schemas.StoryCreate(
-            title=title,
-            version=version,
-            standfirst=standfirst,
-            theme_font=theme_font,
-            theme_primary_color=theme_primary_color,
-            sections=section_creates
-        ))
-        sync_story_json(db, created.id)
-        return created
-    except json.JSONDecodeError as e:
-        raise HTTPException(status_code=400, detail=f"Invalid JSON: {str(e)}")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-# Import entire story.json as ONE post (merge all sections)
-@app.post("/import/story_merged", response_model=schemas.PostRead)
-def import_story_merged(frontend_root: Optional[str] = None, db: Session = Depends(get_db)):
-    if not frontend_root:
-        frontend_root = "F:/work/edit-web/frontend/public"
-    story_path = Path(frontend_root) / "story.json"
-    if not story_path.exists():
-        raise HTTPException(status_code=404, detail=f"story.json not found at {story_path}")
-    story = json.loads(story_path.read_text(encoding="utf-8"))
-
-    title = story.get("title") or "Story"
-    standfirst = story.get("standfirst") or ""
-    version = story.get("version", "1.0")
-    theme = story.get("theme", {})
-    theme_font = theme.get("font")
-    theme_primary_color = theme.get("primaryColor")
-    sections = story.get("sections", [])
-    
-    # 将 sections 转换为 JSON 字符串存储
-    sections_json = json.dumps(sections, ensure_ascii=False)
-
-    # Collect all text and media with stable order
-    text_parts = []
-    media_list = []
-    m_index = 0
-
-    # include standfirst up front if present
-    if standfirst:
-        text_parts.append(standfirst)
-
-    for sec in sections:
-        t = sec.get("type")
-        # text-like
-        if t == "paragraph":
-            content = sec.get("content", "")
-            if content:
-                text_parts.append(content)
-        elif t == "pullquote":
-            txt = sec.get("text", "")
-            cite = sec.get("cite") or ""
-            if txt:
-                if cite:
-                    text_parts.append(f"{txt}\n— {cite}")
-                else:
-                    text_parts.append(txt)
-        # media-like
-        elif t == "imagegif":
-            src = sec.get("src")
-            if src:
-                media_list.append({
-                    "kind": "gif" if src.lower().endswith(('.gif',)) else "image",
-                    "url": src,
-                    "caption": sec.get("caption"),
-                    "alt_text": sec.get("alt", ""),
-                    "credit": sec.get("credit", ""),
-                    "sort_order": m_index
-                })
-                m_index += 1
-        elif t == "video":
-            src = sec.get("src")
-            if src:
-                media_list.append({
-                    "kind": "video",
-                    "url": src,
-                    "caption": sec.get("caption"),
-                    "alt_text": sec.get("alt", ""),
-                    "credit": sec.get("credit", ""),
-                    "sort_order": m_index
-                })
-                m_index += 1
-        elif t == "imagegroup":
-            imgs = sec.get("images", [])
-            for im in imgs:
-                src = im.get("src")
-                if not src: 
-                    continue
-                media_list.append({
-                    "kind": "image",
-                    "url": src,
-                    "caption": im.get("caption"),
-                    "alt_text": im.get("alt", ""),
-                    "credit": im.get("credit", ""),
-                    "sort_order": m_index
-                })
-                m_index += 1
-        # ignore other unknown types gracefully
-
-    merged_text = "\n\n".join([s for s in text_parts if s])
-    created = crud.create_post(db, schemas.PostCreate(
-        title=title,
-        content=merged_text or None,
-        media=[schemas.MediaCreate(**m) for m in media_list],
-        version=version,
-        standfirst=standfirst,
-        theme_font=theme_font,
-        theme_primary_color=theme_primary_color,
-        sections_data=sections_json
-    ))
-    return created
-
-# 文件上传 API
+# ========== 上传（前端管理 public 资源时用，可选） ==========
 @app.post("/upload")
-async def upload_file(
-    file: UploadFile = File(...),
-    target_path: str = Form(...)
-):
-    """上传文件到前端 public 目录的指定路径
-    
-    前端传递：
-    - file: 上传的文件
-    - target_path: 保存路径，例如：/media/demo/video.mp4
-    """
-    try:
-        PUBLIC_DIR.mkdir(parents=True, exist_ok=True)
+async def upload_file(file: UploadFile = File(...), target_path: str = Form(...)):
+    public_dir = (project_root / "capstone-frontend" / "public").resolve()
+    public_dir.mkdir(parents=True, exist_ok=True)
 
-        # Ensure requested path stays under the public directory
-        pure_target = PurePosixPath(target_path.lstrip('/'))
-        if any(part == '..' for part in pure_target.parts):
-            raise HTTPException(status_code=400, detail="非法目标路径")
+    pure = PurePosixPath(target_path.lstrip("/"))
+    if any(p == ".." for p in pure.parts) or not pure.parts:
+        raise HTTPException(status_code=400, detail="非法目标路径")
 
-        if not pure_target.parts:
-            raise HTTPException(status_code=400, detail="目标路径不能为空")
+    full = (public_dir / Path(*pure.parts)).resolve()
+    if public_dir not in full.parents and full != public_dir:
+        raise HTTPException(status_code=400, detail="目标路径不在允许的 public 目录内")
 
-        relative_path = Path(*pure_target.parts)
-        full_path = (PUBLIC_DIR / relative_path).resolve()
-        public_root_resolved = PUBLIC_DIR.resolve()
-        if public_root_resolved not in full_path.parents and full_path != public_root_resolved:
-            raise HTTPException(status_code=400, detail="目标路径不在允许的 public 目录内")
+    with open(full, "wb") as buf:
+        shutil.copyfileobj(file.file, buf)
 
-        full_path.parent.mkdir(parents=True, exist_ok=True)
+    return {"success": True, "url": "/" + str(pure), "filename": full.name}
 
-        with open(full_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-        
-        return {
-            "success": True,
-            "url": target_path,  # 返回前端使用的路径
-            "filename": full_path.name
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"文件上传失败: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
