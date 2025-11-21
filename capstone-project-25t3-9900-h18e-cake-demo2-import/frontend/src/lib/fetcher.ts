@@ -1,88 +1,84 @@
-// frontend/src/lib/fetcher.ts
-
-// frontend/src/lib/fetcher.ts
-// 读取后端根地址：优先 URL ?api=，其次 localStorage.apiBase
+// src/lib/fetcher.ts
+/**
+ * 读取 ?api=xxx 并构造后端基地址；默认回退到 http://localhost:8888
+ * 始终返回绝对 URL，避免相对路径被 GitHub Pages 吸走。
+ */
 export function getApiBase(): string {
-  const url = new URL(window.location.href);
-  const fromQuery = url.searchParams.get('api');
-  const api = (fromQuery || localStorage.getItem('apiBase') || '').trim();
+  const params = new URLSearchParams(window.location.search);
+  const apiRaw = params.get("api");
+  let base = (apiRaw ? decodeURIComponent(apiRaw) : "").trim();
 
-  if (fromQuery) {
-    // 把 ?api= 保存一下，刷新后仍可用
-    localStorage.setItem('apiBase', fromQuery);
+  // 规范化：必须是 http(s) 开头；去掉多余空格
+  if (!/^https?:\/\//i.test(base)) {
+    base = "";
+  }
+  // 默认回退（本地调试）
+  if (!base) {
+    base = "http://localhost:8888";
   }
 
-  if (!api) throw new Error('No API base provided. Append ?api=<backend_root> to the URL.');
-  return api.replace(/\/+$/, ''); // 去掉结尾斜线
+  // 确保以 / 结尾，用 URL 做规范化避免手拼
+  const u = new URL(base);
+  return u.toString(); // 标准化后的绝对地址，结尾会带 /
 }
 
-async function doFetch<T>(path: string, init?: RequestInit): Promise<T> {
+/** 用 URL 安全拼接路径（防止多/少斜杠、相对路径问题） */
+function buildUrl(path: string): string {
   const base = getApiBase();
-  const resp = await fetch(`${base}${path}`, {
-    method: 'GET',
-    mode: 'cors',
-    credentials: 'omit',
-    cache: 'no-store',
+  // path 允许 'story'、'/story'、'story.json' 等，统一交给 URL 处理
+  return new URL(path.replace(/^\//, ""), base).toString();
+}
+
+/** 统一的 JSON fetch（带类型与报错信息） */
+async function fetchJSON<T = any>(path: string, init?: RequestInit): Promise<T> {
+  const url = buildUrl(path);
+  const resp = await fetch(url, {
+    method: "GET",
+    mode: "cors",
+    credentials: "omit",
     headers: {
-      'Accept': 'application/json',
+      Accept: "application/json",
+      "X-Requested-With": "XMLHttpRequest",
     },
     ...init,
   });
 
+  // 不是 2xx 直接抛错，带上文本以便定位
   if (!resp.ok) {
-    const txt = await resp.text().catch(() => '');
-    throw new Error(`Request failed ${resp.status}: ${txt || resp.statusText}`);
+    const txt = await resp.text().catch(() => "");
+    throw new Error(`HTTP ${resp.status} @ ${url}\n${txt.slice(0, 300)}`);
   }
+
+  // 保护：Content-Type 必须像 JSON
+  const ct = resp.headers.get("content-type") || "";
+  if (!/application\/json/i.test(ct)) {
+    const txt = await resp.text().catch(() => "");
+    throw new Error(
+      `Expect JSON but got ${ct || "unknown"} from ${url}. Body(head): ${txt.slice(0, 200)}`
+    );
+  }
+
   return resp.json() as Promise<T>;
 }
 
-// 读取 story（后端 /story 或 /story.json 都可以，这里优先 /story）
-export async function fetchStory(): Promise<any> {
-  try {
-    return await doFetch<any>('/story');
-  } catch {
-    // 某些代理可能只放行 .json，兜底再试 /story.json
-    return await doFetch<any>('/story.json');
-  }
+/** 供页面使用的 API —— 读取故事全文 */
+export async function fetchStory() {
+  return fetchJSON("story"); // 后端也兼容 /story.json（见 main.py）
+}
+
+/** 读取分节列表（如果你的后端有） */
+export async function fetchSections() {
+  return fetchJSON("sections");
+}
+
+/** 读取健康检查 */
+export async function fetchHealth() {
+  return fetchJSON("healthz");
 }
 
 export default {
   getApiBase,
   fetchStory,
+  fetchSections,
+  fetchHealth,
 };
-
-
-/** ======== 下面是前端现用到的 API ========= **/
-
-// export type Story = {
-//   // 只列你页面真实用到的字段即可；若还有字段，按需补充
-//   sections: any[];
-// };
-
-// // 读取整篇 story（用于首页显示 & 右侧编辑器同步）
-// export const fetchStory = () => request<Story>("/story");
-
-// // 侧栏列表
-// export const fetchSections = () => request<any[]>("/sections");
-
-// // 新增分段
-// export const createSection = (payload: any) =>
-//   request<any>("/sections", { method: "POST", body: JSON.stringify(payload) });
-
-// // 更新分段
-// export const updateSection = (id: number | string, payload: any) =>
-//   request<any>(`/sections/${id}`, {
-//     method: "PATCH",
-//     body: JSON.stringify(payload),
-//   });
-
-// // 删除分段
-// export const deleteSection = (id: number | string) =>
-//   request<any>(`/sections/${id}`, { method: "DELETE" });
-
-// // 导入整篇 story（你页面上的 Import Data 按钮）
-// export const importStory = (payload: any) =>
-//   request<any>("/import/story_merged", {
-//     method: "POST",
-  //   body: JSON.stringify(payload),
-  // });
