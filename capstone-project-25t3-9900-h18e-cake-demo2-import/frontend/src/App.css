@@ -649,11 +649,5 @@ label {
 .embed-mode .header-actions{display:none!important}
 .embed-mode .header-placeholder{display:none!important}
 
-/* 让标题里的数字更清晰：用等高 lining/tabular 数字，并启用斜杠零 */
-.headline-numerals {
-  font-variant-numeric: lining-nums tabular-nums slashed-zero;
-  /* 兼容一些不识别上面写法的浏览器 */
-  font-feature-settings: "lnum" 1, "tnum" 1, "zero" 1;
-}
 
 
