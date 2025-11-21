@@ -150,24 +150,64 @@ def delete_post(post_id: int, db: Session = Depends(get_db)):
     return {"deleted": True, "id": post_id}
 
 # ========== 上传（前端管理 public 资源时用，可选） ==========
+# @app.post("/upload")
+# async def upload_file(file: UploadFile = File(...), target_path: str = Form(...)):
+#     public_dir = (project_root / "capstone-frontend" / "public").resolve()
+#     public_dir.mkdir(parents=True, exist_ok=True)
+#     pure = PurePosixPath(target_path.lstrip("/"))
+#     if any(p == ".." for p in pure.parts) or not pure.parts:
+#         raise HTTPException(status_code=400, detail="非法目标路径")
+#     full = (public_dir / Path(*pure.parts)).resolve()
+#     if public_dir not in full.parents and full != public_dir:
+#         raise HTTPException(status_code=400, detail="目标路径不在允许的 public 目录内")
+#     with open(full, "wb") as buf:
+#         shutil.copyfileobj(file.file, buf)
+#     return {"success": True, "url": "/" + str(pure), "filename": full.name}
+
+PUBLIC_DIR = (project_root / "capstone-frontend" / "public").resolve()
+UPLOAD_DIR = (PUBLIC_DIR / "media" / "uploads")
+
+def _safe_name(name: str) -> str:
+    # 简单清洗文件名
+    base = re.sub(r"[^A-Za-z0-9._-]+", "-", name).strip("-")
+    if not base:
+        base = "upload"
+    return base
+        
+def _ensure_dirs():
+    PUBLIC_DIR.mkdir(parents=True, exist_ok=True)
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...), target_path: str = Form(...)):
-    public_dir = (project_root / "capstone-frontend" / "public").resolve()
-    public_dir.mkdir(parents=True, exist_ok=True)
-
+    """
+    高级上传：前端明确指定 target_path（如 /media/uploads/xxx.jpg）
+    """
+    _ensure_dirs()
     pure = PurePosixPath(target_path.lstrip("/"))
-    if any(p == ".." for p in pure.parts) or not pure.parts:
-        raise HTTPException(status_code=400, detail="非法目标路径")
-
-    full = (public_dir / Path(*pure.parts)).resolve()
-    if public_dir not in full.parents and full != public_dir:
-        raise HTTPException(status_code=400, detail="目标路径不在允许的 public 目录内")
-
+    full = (PUBLIC_DIR / Path(*pure.parts)).resolve()
+    if PUBLIC_DIR not in full.parents and full != PUBLIC_DIR:
+        raise HTTPException(status_code=400, detail="target_path out of public dir")
     with open(full, "wb") as buf:
-        shutil.copyfileobj(file.file, buf)
-
+        buf.write(await file.read())
     return {"success": True, "url": "/" + str(pure), "filename": full.name}
 
+@app.post("/files")
+async def upload_file_simple(file: UploadFile = File(...)):
+    """
+    兼容端点：前端只传 file。后端自动把文件存到 /media/uploads/ 下，并返回 {path: "/media/uploads/xxx"}。
+    这样现有前端 ImageEditForm.tsx 的 `${apiBase}/files` 可以直接使用。
+    """
+    _ensure_dirs()
+    ext = Path(file.filename or "").suffix or ".bin"
+    ts = str(int(time.time() * 1000))
+    name = _safe_name(Path(file.filename or "upload").stem)
+    final = f"{ts}-{name}{ext}"
+    full = (UPLOAD_DIR / final).resolve()
+    with open(full, "wb") as buf:
+        buf.write(await file.read())
+    rel = "/media/uploads/" + final
+    return {"path": rel, "url": rel}
 
 if __name__ == "__main__":
     import uvicorn
