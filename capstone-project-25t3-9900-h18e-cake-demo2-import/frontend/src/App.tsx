@@ -1,6 +1,6 @@
 // src/App.tsx
 import { useEffect, useState, useMemo, useRef } from 'react';
-import { fetchStory } from './lib/fetcher';
+import { fetchStory, getApiBase } from './lib/fetcher';
 import { Story, HeroSection } from './lib/types';
 import VideoPlayer from './components/VideoPlayer';
 import Paragraph from './components/Paragraph';
@@ -31,6 +31,7 @@ function App() {
   const [previewMode, setPreviewMode] = useState<PreviewMode>('desktop');
   const [previewMenuOpen, setPreviewMenuOpen] = useState(false);
   const previewMenuRef = useRef<HTMLDivElement | null>(null);
+
   // === Iframe embed support ===
   const isEmbedMode = useMemo(() => {
     try {
@@ -44,10 +45,10 @@ function App() {
   const [showIframeModal, setShowIframeModal] = useState(false);
   const [iframeCode, setIframeCode] = useState('');
 
+  // 保留当前 URL 的 ?api= 参数并添加 embed=1
   const buildEmbedUrl = () => {
     const url = new URL(window.location.href);
-    // remove transient params if any
-    ['preview','edit','t'].forEach(k => url.searchParams.delete(k));
+    ['preview', 'edit', 't'].forEach(k => url.searchParams.delete(k));
     url.searchParams.set('embed', '1');
     url.hash = '';
     return url.toString();
@@ -55,8 +56,7 @@ function App() {
 
   const openIframeModal = () => {
     const embedUrl = buildEmbedUrl();
-    // const code = `<iframe src="${embedUrl}" width="100%" height="1000" style="border:0;" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>`;
-    const code = `<iframe src="src="https://ryan79315.github.io/capstone-project-25t3-9900-h18e-cake/demo.html" width="100%" height="1000" style="border:0;" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>`;
+    const code = `<iframe src="${embedUrl}" width="100%" height="1000" style="border:0;" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>`;
     setIframeCode(code);
     setShowIframeModal(true);
   };
@@ -73,7 +73,6 @@ function App() {
       }
     }
   };
-
 
   // Global Lightbox Status
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -118,10 +117,7 @@ function App() {
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (
-        previewMenuRef.current &&
-        !previewMenuRef.current.contains(event.target as Node)
-      ) {
+      if (previewMenuRef.current && !previewMenuRef.current.contains(event.target as Node)) {
         setPreviewMenuOpen(false);
       }
     };
@@ -129,22 +125,26 @@ function App() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleEditorToggle = () => {
-    setShowEditor(prev => !prev);
-  };
-
+  const handleEditorToggle = () => setShowEditor(prev => !prev);
   const handleEditorClose = () => setShowEditor(false);
   const handleStoryRefresh = () => setRefreshKey(prev => prev + 1);
 
+  // 安全拿 sections（后端异常时可能不是数组）
+  const safeSections = useMemo(() => {
+    if (!story || !Array.isArray((story as any).sections)) return [] as any[];
+    return (story as any).sections as any[];
+  }, [story]);
+
   const heroSection = useMemo(() => {
     if (!story) return null;
-    return (story.sections.find((section) => section.type === 'hero') as HeroSection | undefined) || null;
-  }, [story]);
+    const hero = safeSections.find((section) => section.type === 'hero') as HeroSection | undefined;
+    return hero || null;
+  }, [story, safeSections]);
 
   const contentSections = useMemo(() => {
     if (!story) return [];
-    return story.sections.filter((section) => section.type !== 'hero');
-  }, [story]);
+    return safeSections.filter((section) => section.type !== 'hero');
+  }, [story, safeSections]);
 
   // Collect all the pictures and calculate the global index
   const allImages = useMemo(() => {
@@ -156,9 +156,9 @@ function App() {
       credit?: string;
       globalIndex: number;
     }> = [];
-    contentSections.forEach((section) => {
-      if (section.type === 'imagegroup') {
-        section.images.forEach((img) => {
+    contentSections.forEach((section: any) => {
+      if (section.type === 'imagegroup' && Array.isArray(section.images)) {
+        section.images.forEach((img: any) => {
           images.push({ ...img, globalIndex: images.length });
         });
       }
@@ -170,8 +170,8 @@ function App() {
   const sectionsWithGlobalIndex = useMemo(() => {
     if (!story) return [];
     let globalIndex = 0;
-    return contentSections.map((section) => {
-      if (section.type === 'imagegroup') {
+    return contentSections.map((section: any) => {
+      if (section.type === 'imagegroup' && Array.isArray(section.images)) {
         const sectionWithIndex = {
           ...section,
           globalStartIndex: globalIndex,
@@ -204,9 +204,10 @@ function App() {
         const formData = new FormData();
         formData.append('file', file);
 
-        const response = await fetch('http://localhost:8888/import/story_upload', {
+        // 使用 fetcher 的后端基址，而不是写死 localhost
+        const response = await fetch(`${getApiBase()}/import/story_upload`, {
           method: 'POST',
-          body: formData
+          body: formData,
         });
 
         if (response.ok) {
@@ -214,8 +215,8 @@ function App() {
           alert(`Import succeeded!\nArticle ID: ${result.id}\nTitle: ${result.title}\nThe page will refresh automatically.`);
           window.location.reload();
         } else {
-          const errorData = await response.json();
-          throw new Error(errorData.detail || 'Import failed');
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error((errorData as any).detail || 'Import failed');
         }
       } catch (error) {
         alert(`Import failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -268,118 +269,118 @@ function App() {
         <div
           className="story-container"
           style={{
-            fontFamily: story.theme.font,
-            '--primary-color': story.theme.primaryColor
+            fontFamily: story.theme?.font,
+            '--primary-color': (story.theme as any)?.primaryColor
           } as React.CSSProperties}
         >
-      <header className={`story-header${heroSection ? ' story-header--with-hero' : ''}`}>
-        <div className="header-top">
-          <div className="header-placeholder"></div>
-          <div className="header-actions">
-            <button className="edit-button" onClick={handleImportStory}>Import Data</button>
-            <button
-              className="edit-button"
-              onClick={handleEditorToggle}
-              aria-pressed={showEditor}
-            >
-              {showEditor ? 'Close Editor' : 'Edit'}
-            </button>
-            <button className="edit-button" onClick={openIframeModal}>Iframe</button>
-            <div className="preview-control" ref={previewMenuRef}>
-              <button
-                className="edit-button preview-button"
-                onClick={() => setPreviewMenuOpen(prev => !prev)}
-                aria-expanded={previewMenuOpen}
-                aria-haspopup="listbox"
-              >
-                Preview
-                <svg viewBox="0 0 16 16" aria-hidden="true">
-                  <path
-                    d="M4 6l4 4 4-4"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </button>
-              {previewMenuOpen && (
-                <div className="preview-menu" role="listbox">
-                  {PREVIEW_OPTIONS.map(option => (
-                    <button
-                      key={option.value}
-                      className={`preview-menu-item${previewMode === option.value ? ' active' : ''}`}
-                      onClick={() => {
-                        setPreviewMode(option.value);
-                        setPreviewMenuOpen(false);
-                      }}
-                      role="option"
-                      aria-selected={previewMode === option.value}
-                    >
-                      <span>{option.label}</span>
-                      <small>{option.widthLabel}</small>
-                    </button>
-                  ))}
+          <header className={`story-header${heroSection ? ' story-header--with-hero' : ''}`}>
+            <div className="header-top">
+              <div className="header-placeholder"></div>
+              <div className="header-actions">
+                <button className="edit-button" onClick={handleImportStory}>Import Data</button>
+                <button
+                  className="edit-button"
+                  onClick={handleEditorToggle}
+                  aria-pressed={showEditor}
+                >
+                  {showEditor ? 'Close Editor' : 'Edit'}
+                </button>
+                <button className="edit-button" onClick={openIframeModal}>Iframe</button>
+                <div className="preview-control" ref={previewMenuRef}>
+                  <button
+                    className="edit-button preview-button"
+                    onClick={() => setPreviewMenuOpen(prev => !prev)}
+                    aria-expanded={previewMenuOpen}
+                    aria-haspopup="listbox"
+                  >
+                    Preview
+                    <svg viewBox="0 0 16 16" aria-hidden="true">
+                      <path
+                        d="M4 6l4 4 4-4"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </button>
+                  {previewMenuOpen && (
+                    <div className="preview-menu" role="listbox">
+                      {PREVIEW_OPTIONS.map(option => (
+                        <button
+                          key={option.value}
+                          className={`preview-menu-item${previewMode === option.value ? ' active' : ''}`}
+                          onClick={() => {
+                            setPreviewMode(option.value);
+                            setPreviewMenuOpen(false);
+                          }}
+                          role="option"
+                          aria-selected={previewMode === option.value}
+                        >
+                          <span>{option.label}</span>
+                          <small>{option.widthLabel}</small>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
-          </div>
-        </div>
-        {heroSection ? (
-          <HeroBlock
-            {...heroSection}
-            fallbackTitle={story.title}
-            fallbackStandfirst={story.standfirst}
-          />
-        ) : (
-          <>
-            <h1 className="story-title">{story.title}</h1>
-            <p className="story-standfirst">{story.standfirst}</p>
-          </>
-        )}
-      </header>
+            {heroSection ? (
+              <HeroBlock
+                {...heroSection}
+                fallbackTitle={story.title}
+                fallbackStandfirst={story.standfirst}
+              />
+            ) : (
+              <>
+                <h1 className="story-title">{story.title}</h1>
+                <p className="story-standfirst">{story.standfirst}</p>
+              </>
+            )}
+          </header>
 
-      <main className="story-content">
-        {sectionsWithGlobalIndex.map((section: any, index: number) => {
-          switch (section.type) {
-            case 'video':
-              return <VideoPlayer key={`video-${index}`} {...section} />;
-            case 'paragraph':
-              return <Paragraph key={`paragraph-${index}`} {...section} />;
-            case 'pullquote':
-              return <PullQuote key={`quote-${index}`} {...section} />;
-            case 'image':
-              return <ImageGIF key={`image-${index}`} {...section} onImageClick={openGlobalLightbox} />;
-            case 'imagegroup':
-              return (
-                <ImageGroup
-                  key={`imagegroup-${index}`}
-                  images={section.images}
-                  globalStartIndex={section.globalStartIndex}
-                  totalImages={section.totalImages}
-                  onImageClick={openGlobalLightbox}
-                />
-              );
-            case 'scrollytelling':
-              return <Scrollytelling key={`scrollytelling-${index}`} {...section} />;
-            default:
-              return null;
-          }
-        })}
-      </main>
+          <main className="story-content">
+            {sectionsWithGlobalIndex.map((section: any, index: number) => {
+              switch (section.type) {
+                case 'video':
+                  return <VideoPlayer key={`video-${index}`} {...section} />;
+                case 'paragraph':
+                  return <Paragraph key={`paragraph-${index}`} {...section} />;
+                case 'pullquote':
+                  return <PullQuote key={`quote-${index}`} {...section} />;
+                case 'image':
+                  return <ImageGIF key={`image-${index}`} {...section} onImageClick={openGlobalLightbox} />;
+                case 'imagegroup':
+                  return (
+                    <ImageGroup
+                      key={`imagegroup-${index}`}
+                      images={section.images || []}
+                      globalStartIndex={section.globalStartIndex}
+                      totalImages={section.totalImages}
+                      onImageClick={openGlobalLightbox}
+                    />
+                  );
+                case 'scrollytelling':
+                  return <Scrollytelling key={`scrollytelling-${index}`} {...section} />;
+                default:
+                  return null;
+              }
+            })}
+          </main>
 
-      <footer className="story-footer">
-        <p>© 2025 Newsworthy - UNSW Student Journalism</p>
-      </footer>
+          <footer className="story-footer">
+            <p>© 2025 Newsworthy - UNSW Student Journalism</p>
+          </footer>
 
-      {lightboxOpen && (
-        <GlobalLightbox
-          images={allImages}
-          currentIndex={lightboxIndex}
-          onClose={closeLightbox}
-        />
-      )}
+          {lightboxOpen && (
+            <GlobalLightbox
+              images={allImages}
+              currentIndex={lightboxIndex}
+              onClose={closeLightbox}
+            />
+          )}
         </div>
       </div>
 
@@ -400,6 +401,7 @@ function App() {
           onClick={handleEditorClose}
         />
       )}
+
       {/* Iframe code modal */}
       {showIframeModal && (
         <div className="modal-backdrop" onClick={() => setShowIframeModal(false)}>
@@ -424,9 +426,7 @@ function App() {
         </div>
       )}
     </div>
-  
-
-);
+  );
 }
 
 export default App;
