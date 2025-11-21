@@ -602,6 +602,7 @@ export default function PostEditor({
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState<Section | null>(null);
   const [heroEditing, setHeroEditing] = useState<Section | null>(null); // Hero 弹窗
+  const [imageEditing, setImageEditing] = useState<Section | null>(null);
 
   // 拉取 story + sections
   const refresh = async (skipSpinner = false) => {
