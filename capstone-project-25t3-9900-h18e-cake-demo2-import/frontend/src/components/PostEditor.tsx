@@ -1,739 +1,769 @@
 // src/components/PostEditor.tsx
-import { useState, useEffect } from 'react';
-import ParagraphEditForm from './ParagraphEditForm';
-import ImageGroupEditForm from './ImageGroupEditForm';
-import PullQuoteEditForm from './PullQuoteEditForm';
-import ImageEditForm from './ImageEditForm';
-import ScrollytellingEditForm from './ScrollytellingEditForm';
-import HeroEditForm from './HeroEditForm';
-import { getApiBaseUrl } from '../lib/fetcher';
+import React, { useEffect, useMemo, useState } from 'react';
+import { getApiBase } from '../lib/fetcher';
 
-// 统一请求头（绕过 ngrok 免费域拦截 + 标记为 fetch 请求）
-const JSON_HEADERS = {
-  'ngrok-skip-browser-warning': '1',
-  'x-requested-with': 'fetch',
-  'Content-Type': 'application/json',
-} as const;
+/* =========================================================
+   通用：API 基址与请求工具（带 ngrok 绕过头）
+   ========================================================= */
+const API_BASE_URL = getApiBase();
+
 const GET_HEADERS = {
   'ngrok-skip-browser-warning': '1',
   'x-requested-with': 'fetch',
 } as const;
 
-const API_BASE_URL = getApiBaseUrl();
+const JSON_HEADERS = {
+  ...GET_HEADERS,
+  'Content-Type': 'application/json',
+} as const;
+
+async function fetchAsJson(url: string, init?: RequestInit) {
+  const res = await fetch(url, {
+    mode: 'cors',
+    credentials: 'omit',
+    headers: { ...GET_HEADERS, ...(init?.headers || {}) },
+    ...init,
+  });
+  const ctype = res.headers.get('content-type') || '';
+  const isJson = ctype.includes('application/json');
+  const payload = isJson ? await res.json() : await res.text();
+  if (!res.ok) {
+    const brief =
+      typeof payload === 'string' ? payload.slice(0, 200) : JSON.stringify(payload).slice(0, 200);
+    throw new Error(`HTTP ${res.status} ${res.statusText} – ${brief}`);
+  }
+  return payload;
+}
+
+async function sendJson(url: string, method: 'POST' | 'PATCH' | 'DELETE', body?: any) {
+  const res = await fetch(url, {
+    method,
+    mode: 'cors',
+    credentials: 'omit',
+    headers: JSON_HEADERS,
+    body: body == null ? undefined : typeof body === 'string' ? body : JSON.stringify(body),
+  });
+  const ctype = res.headers.get('content-type') || '';
+  const isJson = ctype.includes('application/json');
+  const payload = isJson ? await res.json() : await res.text();
+  if (!res.ok) {
+    const brief =
+      typeof payload === 'string' ? payload.slice(0, 200) : JSON.stringify(payload).slice(0, 200);
+    throw new Error(`HTTP ${res.status} ${res.statusText} – ${brief}`);
+  }
+  return payload;
+}
+
+/* =========================================================
+   类型与工具
+   ========================================================= */
+type SectionType =
+  | 'hero'
+  | 'paragraph'
+  | 'image'
+  | 'imagegroup'
+  | 'pullquote'
+  | 'scrollytelling'
+  | string; // 预留以后拓展
 
 interface Section {
   id: number;
   story_id: number;
-  type: string;
-  data: string; // JSON string
+  type: SectionType;
+  data: string; // 后端存 JSON 字符串
   sort_order: number;
 }
 
-interface PostEditorProps {
-  embedded?: boolean;
-  onClose?: () => void;
-  onSectionsUpdated?: () => void;
+interface Story {
+  id: number;
+  title?: string;
+  [k: string]: any;
 }
 
+/* =========================================================
+   子表单：基础字段定义
+   - 简化了复杂结构；复杂内容（如 scrollytelling）提供 JSON 编辑模式
+   ========================================================= */
+
+// ---------- Hero ----------
+type HeroData = {
+  title?: string;
+  backgroundColor?: string;
+  textColor?: string;
+  kicker?: string;
+  authorLine?: string;
+};
+
+function HeroEditForm({
+  value,
+  onChange,
+}: {
+  value: HeroData;
+  onChange: (v: HeroData) => void;
+}) {
+  return (
+    <div className="form-grid">
+      <label>
+        Title
+        <input
+          value={value.title || ''}
+          onChange={(e) => onChange({ ...value, title: e.target.value })}
+          placeholder="Hero title"
+        />
+      </label>
+      <label>
+        Kicker
+        <input
+          value={value.kicker || ''}
+          onChange={(e) => onChange({ ...value, kicker: e.target.value })}
+          placeholder="Byline / kicker"
+        />
+      </label>
+      <label>
+        Author Line
+        <input
+          value={value.authorLine || ''}
+          onChange={(e) => onChange({ ...value, authorLine: e.target.value })}
+          placeholder="Author(s)"
+        />
+      </label>
+      <label>
+        Background Color
+        <input
+          value={value.backgroundColor || ''}
+          onChange={(e) => onChange({ ...value, backgroundColor: e.target.value })}
+          placeholder="#0d3557"
+        />
+      </label>
+      <label>
+        Text Color
+        <input
+          value={value.textColor || ''}
+          onChange={(e) => onChange({ ...value, textColor: e.target.value })}
+          placeholder="#ffffff"
+        />
+      </label>
+    </div>
+  );
+}
+
+// ---------- Paragraph ----------
+type ParagraphData = { content?: string };
+
+function ParagraphEditForm({
+  value,
+  onChange,
+}: {
+  value: ParagraphData;
+  onChange: (v: ParagraphData) => void;
+}) {
+  return (
+    <label className="block">
+      Content
+      <textarea
+        rows={5}
+        value={value.content || ''}
+        onChange={(e) => onChange({ ...value, content: e.target.value })}
+        placeholder="Paragraph text..."
+      />
+    </label>
+  );
+}
+
+// ---------- Image ----------
+type ImageData = {
+  src?: string;
+  alt?: string;
+  caption?: string;
+  credit?: string;
+  layout?: 'default' | 'third' | 'inline';
+};
+
+function ImageEditForm({
+  value,
+  onChange,
+}: {
+  value: ImageData;
+  onChange: (v: ImageData) => void;
+}) {
+  return (
+    <div className="form-grid">
+      <label>
+        Image URL
+        <input
+          value={value.src || ''}
+          onChange={(e) => onChange({ ...value, src: e.target.value })}
+          placeholder="https://..."
+        />
+      </label>
+      <label>
+        Alt
+        <input
+          value={value.alt || ''}
+          onChange={(e) => onChange({ ...value, alt: e.target.value })}
+          placeholder="Alternative text"
+        />
+      </label>
+      <label>
+        Caption
+        <input
+          value={value.caption || ''}
+          onChange={(e) => onChange({ ...value, caption: e.target.value })}
+          placeholder="Caption"
+        />
+      </label>
+      <label>
+        Credit
+        <input
+          value={value.credit || ''}
+          onChange={(e) => onChange({ ...value, credit: e.target.value })}
+          placeholder="Photo credit"
+        />
+      </label>
+      <label>
+        Layout
+        <select
+          value={value.layout || 'default'}
+          onChange={(e) => onChange({ ...value, layout: e.target.value as ImageData['layout'] })}
+        >
+          <option value="default">default</option>
+          <option value="third">third</option>
+          <option value="inline">inline</option>
+        </select>
+      </label>
+    </div>
+  );
+}
+
+// ---------- ImageGroup ----------
+type ImageGroupItem = { src?: string; alt?: string; caption?: string; credit?: string };
+type ImageGroupData = { images?: ImageGroupItem[] };
+
+function ImageGroupEditForm({
+  value,
+  onChange,
+}: {
+  value: ImageGroupData;
+  onChange: (v: ImageGroupData) => void;
+}) {
+  const images = value.images || [];
+
+  const updateAt = (idx: number, patch: Partial<ImageGroupItem>) => {
+    const next = images.map((it, i) => (i === idx ? { ...it, ...patch } : it));
+    onChange({ images: next });
+  };
+
+  return (
+    <div className="stack">
+      {images.map((img, i) => (
+        <div key={i} className="card">
+          <div className="form-grid">
+            <label>
+              Image URL
+              <input
+                value={img.src || ''}
+                onChange={(e) => updateAt(i, { src: e.target.value })}
+                placeholder="https://..."
+              />
+            </label>
+            <label>
+              Alt
+              <input
+                value={img.alt || ''}
+                onChange={(e) => updateAt(i, { alt: e.target.value })}
+                placeholder="Alt"
+              />
+            </label>
+            <label>
+              Caption
+              <input
+                value={img.caption || ''}
+                onChange={(e) => updateAt(i, { caption: e.target.value })}
+                placeholder="Caption"
+              />
+            </label>
+            <label>
+              Credit
+              <input
+                value={img.credit || ''}
+                onChange={(e) => updateAt(i, { credit: e.target.value })}
+                placeholder="Credit"
+              />
+            </label>
+          </div>
+          <div className="row">
+            <button
+              type="button"
+              className="danger"
+              onClick={() => onChange({ images: images.filter((_, idx) => idx !== i) })}
+            >
+              Remove
+            </button>
+          </div>
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={() => onChange({ images: [...images, { src: '', alt: '' }] })}
+      >
+        + Add Image
+      </button>
+    </div>
+  );
+}
+
+// ---------- PullQuote ----------
+type PullQuoteData = { text?: string; attribution?: string };
+
+function PullQuoteEditForm({
+  value,
+  onChange,
+}: {
+  value: PullQuoteData;
+  onChange: (v: PullQuoteData) => void;
+}) {
+  return (
+    <div className="form-grid">
+      <label>
+        Text
+        <input
+          value={value.text || ''}
+          onChange={(e) => onChange({ ...value, text: e.target.value })}
+          placeholder="Quote content"
+        />
+      </label>
+      <label>
+        Attribution
+        <input
+          value={value.attribution || ''}
+          onChange={(e) => onChange({ ...value, attribution: e.target.value })}
+          placeholder="— Name"
+        />
+      </label>
+    </div>
+  );
+}
+
+// ---------- Scrollytelling（复杂：提供 JSON 区域） ----------
+type ScrollytellingData = Record<string, any>;
+
+function ScrollytellingEditForm({
+  value,
+  onChange,
+}: {
+  value: ScrollytellingData;
+  onChange: (v: ScrollytellingData) => void;
+}) {
+  const [raw, setRaw] = useState<string>(JSON.stringify(value || {}, null, 2));
+  useEffect(() => {
+    setRaw(JSON.stringify(value || {}, null, 2));
+  }, [value]);
+
+  return (
+    <label className="block">
+      JSON
+      <textarea
+        rows={12}
+        value={raw}
+        onChange={(e) => setRaw(e.target.value)}
+        onBlur={() => {
+          try {
+            onChange(JSON.parse(raw || '{}'));
+          } catch {
+            // 保持原值，给出轻提示
+            alert('Invalid JSON in scrollytelling editor. Please fix it.');
+          }
+        }}
+        placeholder={`{\n  "items": [ ... ]\n}`}
+      />
+    </label>
+  );
+}
+
+/* =========================================================
+   通用：Section 表单容器（选择类型 + 对应子表单 + 排序）
+   ========================================================= */
+function SectionTypeForm({
+  type,
+  valueJson,
+  sortOrder,
+  onTypeChange,
+  onDataChange,
+  onSortChange,
+}: {
+  type: SectionType;
+  valueJson: string;
+  sortOrder: number;
+  onTypeChange: (t: SectionType) => void;
+  onDataChange: (json: string) => void;
+  onSortChange: (n: number) => void;
+}) {
+  // 解析 JSON（失败则空对象）
+  const dataObj = useMemo(() => {
+    try {
+      return valueJson ? JSON.parse(valueJson) : {};
+    } catch {
+      return {};
+    }
+  }, [valueJson]);
+
+  const setDataObj = (obj: any) => onDataChange(JSON.stringify(obj ?? {}, null, 2));
+
+  return (
+    <div className="stack">
+      <div className="form-grid">
+        <label>
+          Type
+          <select value={type} onChange={(e) => onTypeChange(e.target.value)}>
+            <option value="hero">hero</option>
+            <option value="paragraph">paragraph</option>
+            <option value="image">image</option>
+            <option value="imagegroup">imagegroup</option>
+            <option value="pullquote">pullquote</option>
+            <option value="scrollytelling">scrollytelling</option>
+          </select>
+        </label>
+        <label>
+          Sort Order
+          <input
+            type="number"
+            value={sortOrder}
+            onChange={(e) => onSortChange(Number(e.target.value))}
+            min={0}
+            step={1}
+          />
+        </label>
+      </div>
+
+      {/* 根据类型渲染子表单 */}
+      {type === 'hero' && (
+        <HeroEditForm value={dataObj as HeroData} onChange={setDataObj} />
+      )}
+      {type === 'paragraph' && (
+        <ParagraphEditForm value={dataObj as ParagraphData} onChange={setDataObj} />
+      )}
+      {type === 'image' && (
+        <ImageEditForm value={dataObj as ImageData} onChange={setDataObj} />
+      )}
+      {type === 'imagegroup' && (
+        <ImageGroupEditForm value={dataObj as ImageGroupData} onChange={setDataObj} />
+      )}
+      {type === 'pullquote' && (
+        <PullQuoteEditForm value={dataObj as PullQuoteData} onChange={setDataObj} />
+      )}
+      {type === 'scrollytelling' && (
+        <ScrollytellingEditForm
+          value={dataObj as ScrollytellingData}
+          onChange={setDataObj}
+        />
+      )}
+
+      {/* 原始 JSON 预览（可折叠，这里简单展示） */}
+      <details>
+        <summary>Raw JSON (readonly preview)</summary>
+        <pre className="json-preview">{valueJson || '{}'}</pre>
+      </details>
+    </div>
+  );
+}
+
+/* =========================================================
+   Create / Edit 表单
+   ========================================================= */
+function CreateSectionForm({
+  storyId,
+  onSuccess,
+  onCancel,
+}: {
+  storyId: number;
+  onSuccess: () => void;
+  onCancel: () => void;
+}) {
+  const [type, setType] = useState<SectionType>('paragraph');
+  const [data, setData] = useState<string>('{}');
+  const [sortOrder, setSortOrder] = useState<number>(0);
+  const [busy, setBusy] = useState(false);
+
+  const submit = async () => {
+    try {
+      setBusy(true);
+      // 校验 JSON
+      JSON.parse(data || '{}');
+      await sendJson(`${API_BASE_URL}/sections`, 'POST', {
+        story_id: storyId,
+        type,
+        data,
+        sort_order: sortOrder,
+      });
+      onSuccess();
+    } catch (err) {
+      alert(`Create failed: ${(err as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="panel">
+      <h3>Create Section</h3>
+      <SectionTypeForm
+        type={type}
+        valueJson={data}
+        sortOrder={sortOrder}
+        onTypeChange={setType}
+        onDataChange={setData}
+        onSortChange={setSortOrder}
+      />
+      <div className="row">
+        <button disabled={busy} onClick={submit}>
+          {busy ? 'Creating…' : 'Create'}
+        </button>
+        <button className="secondary" onClick={onCancel} disabled={busy}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function EditSectionForm({
+  section,
+  onSaved,
+  onCancel,
+}: {
+  section: Section;
+  onSaved: (next: Section) => void;
+  onCancel: () => void;
+}) {
+  const [type, setType] = useState<SectionType>(section.type);
+  const [data, setData] = useState<string>(section.data || '{}');
+  const [sortOrder, setSortOrder] = useState<number>(section.sort_order || 0);
+  const [busy, setBusy] = useState(false);
+
+  const submit = async () => {
+    try {
+      setBusy(true);
+      JSON.parse(data || '{}');
+      const payload = await sendJson(`${API_BASE_URL}/sections/${section.id}`, 'PATCH', {
+        type,
+        data,
+        sort_order: sortOrder,
+      });
+      onSaved(payload);
+    } catch (err) {
+      alert(`Save failed: ${(err as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="panel">
+      <h3>Edit Section #{section.id}</h3>
+      <SectionTypeForm
+        type={type}
+        valueJson={data}
+        sortOrder={sortOrder}
+        onTypeChange={setType}
+        onDataChange={setData}
+        onSortChange={setSortOrder}
+      />
+      <div className="row">
+        <button disabled={busy} onClick={submit}>
+          {busy ? 'Saving…' : 'Save'}
+        </button>
+        <button className="secondary" onClick={onCancel} disabled={busy}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================
+   主组件：PostEditor
+   ========================================================= */
 export default function PostEditor({
   embedded = false,
   onClose,
   onSectionsUpdated,
-}: PostEditorProps = {}) {
-  const [sections, setSections] = useState<Section[]>([]);
+}: {
+  embedded?: boolean;
+  onClose?: () => void;
+  onSectionsUpdated?: () => void;
+}) {
   const [loading, setLoading] = useState(true);
+  const [story, setStory] = useState<Story | null>(null);
+  const [sections, setSections] = useState<Section[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [showCreateForm, setShowCreateForm] = useState(false);
-  const [editingSection, setEditingSection] = useState<Section | null>(null);
-  const [storyId, setStoryId] = useState<number | null>(null);
 
-  // ---- helpers ----
-  const fetchAsJson = async (url: string) => {
-    const res = await fetch(url, { headers: GET_HEADERS, mode: 'cors', credentials: 'omit' });
-    const ctype = res.headers.get('content-type') || '';
-    const isJson = ctype.includes('application/json');
-    const payload = isJson ? await res.json() : await res.text();
-    if (!res.ok) {
-      const brief = typeof payload === 'string' ? payload.slice(0, 200) : JSON.stringify(payload).slice(0, 200);
-      throw new Error(`HTTP ${res.status} ${res.statusText} – ${brief}`);
-    }
-    return payload;
-  };
+  const [showCreate, setShowCreate] = useState(false);
+  const [editing, setEditing] = useState<Section | null>(null);
 
-  const sendJson = async (url: string, method: 'POST' | 'PATCH' | 'DELETE', body?: any) => {
-    const res = await fetch(url, {
-      method,
-      headers: JSON_HEADERS,
-      body: body ? (typeof body === 'string' ? body : JSON.stringify(body)) : undefined,
-      mode: 'cors',
-      credentials: 'omit',
-    });
-    const ctype = res.headers.get('content-type') || '';
-    const isJson = ctype.includes('application/json');
-    const payload = isJson ? await res.json() : await res.text();
-    if (!res.ok) {
-      const brief = typeof payload === 'string' ? payload.slice(0, 200) : JSON.stringify(payload).slice(0, 200);
-      throw new Error(`HTTP ${res.status} ${res.statusText} – ${brief}`);
-    }
-    return payload;
-  };
-
-  // 获取所有 sections
-  const fetchSections = async (
-    targetStoryId: number,
-    options: { skipLoading?: boolean } = {}
-  ) => {
+  // 拉取 story + sections
+  const refresh = async (skipSpinner = false) => {
     try {
-      if (!options.skipLoading) setLoading(true);
-      const data = await fetchAsJson(`${API_BASE_URL}/sections?story_id=${targetStoryId}`);
-      setSections(data);
-      setError(null);
-    } catch (err) {
-      setError('Failed to fetch sections: ' + (err as Error).message);
-    } finally {
-      if (!options.skipLoading) setLoading(false);
-    }
-  };
-
-  // 获取最新 story，确保拿到 storyId
-  const fetchStoryMeta = async () => {
-    try {
-      setLoading(true);
-      const data = await fetchAsJson(`${API_BASE_URL}/story`);
-      if (typeof data.id !== 'number') {
-        throw new Error('Story data is missing an id field');
-      }
-      setStoryId(data.id);
-      await fetchSections(data.id, { skipLoading: true });
+      if (!skipSpinner) setLoading(true);
+      const s: Story = await fetchAsJson(`${API_BASE_URL}/story`);
+      setStory(s);
+      const list: Section[] = await fetchAsJson(
+        `${API_BASE_URL}/sections?story_id=${s.id}`
+      );
+      setSections(list);
       setError(null);
     } catch (err) {
       setError((err as Error).message);
       setSections([]);
-      setStoryId(null);
-      setShowCreateForm(false);
     } finally {
-      setLoading(false);
+      if (!skipSpinner) setLoading(false);
     }
-  };
-
-  // 删除 section
-  const handleDelete = async (id: number) => {
-    if (!confirm('Are you sure you want to delete this section?')) return;
-    try {
-      await sendJson(`${API_BASE_URL}/sections/${id}`, 'DELETE');
-      setSections(sections.filter(section => section.id !== id));
-      alert('Section deleted successfully!');
-      onSectionsUpdated?.();
-    } catch (err) {
-      alert('Failed to delete: ' + (err as Error).message);
-    }
-  };
-
-  // 编辑 section
-  const handleEdit = (section: Section) => {
-    setEditingSection(section);
   };
 
   useEffect(() => {
-    fetchStoryMeta();
+    refresh();
   }, []);
 
-  const handleClose = () => {
-    if (embedded) {
-      onClose?.();
-    } else if (onClose) {
-      onClose();
-    } else {
-      window.location.href = '/';
+  const handleDelete = async (id: number) => {
+    if (!confirm(`Delete section #${id}?`)) return;
+    try {
+      await sendJson(`${API_BASE_URL}/sections/${id}`, 'DELETE');
+      setSections((prev) => prev.filter((s) => s.id !== id));
+      onSectionsUpdated?.();
+    } catch (err) {
+      alert('Delete failed: ' + (err as Error).message);
     }
   };
 
-  const containerClassName = embedded
-    ? 'editor-container editor-container--embedded'
-    : 'editor-container';
+  const sortedSections = useMemo(
+    () => [...sections].sort((a, b) => a.sort_order - b.sort_order || a.id - b.id),
+    [sections]
+  );
 
   if (loading) {
     return (
       <div className="editor-container">
-        <div className="loading">Loading...</div>
+        <div className="loading">Loading…</div>
       </div>
     );
   }
 
   return (
-    <div className={containerClassName}>
+    <div className="editor-container">
       <div className="editor-header">
-        <h2>Section Management</h2>
+        <h2>SECTION MANAGEMENT</h2>
         <div className="editor-actions">
-          <button
-            onClick={() => setShowCreateForm(!showCreateForm)}
-            disabled={storyId === null}
-            className={embedded ? 'editor-icon-button' : undefined}
-            aria-label={showCreateForm ? 'Cancel new section' : 'Create new section'}
-            title={showCreateForm ? 'Cancel new section' : 'Create new section'}
-          >
-            {embedded ? (
-              <>
-                {showCreateForm ? (
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="M6 6l12 12M6 18L18 6" />
-                  </svg>
-                ) : (
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="M12 5v14M5 12h14" />
-                  </svg>
-                )}
-                <span className="sr-only">
-                  {showCreateForm ? 'Cancel new section' : 'Create new section'}
-                </span>
-              </>
-            ) : (
-              showCreateForm ? 'Cancel' : 'Create New Section'
-            )}
+          <button onClick={() => setShowCreate((v) => !v)} disabled={!story}>
+            {showCreate ? 'Cancel' : '＋'}
           </button>
-          <button
-            onClick={() => {
-              if (storyId !== null) {
-                fetchSections(storyId);
-                onSectionsUpdated?.();
-              }
-            }}
-            disabled={storyId === null}
-            className={embedded ? 'editor-icon-button' : undefined}
-            aria-label="Refresh sections"
-            title="Refresh sections"
-          >
-            {embedded ? (
-              <>
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M4 4v6h6M20 20v-6h-6M6 18a8 8 0 0 0 13.66-3M18 6a8 8 0 0 0-13.66 3" />
-                </svg>
-                <span className="sr-only">Refresh sections</span>
-              </>
-            ) : (
-              'Refresh'
-            )}
+          <button onClick={() => refresh()} disabled={!story}>
+            ⟳
           </button>
-          {(!embedded || !onClose) && (
-            <button onClick={handleClose}>
-              {embedded ? 'Close Editor' : 'Back'}
-            </button>
-          )}
         </div>
       </div>
 
-      {error && <div className="error-message">{error}</div>}
+      {error && <div className="error-message">Failed to fetch<br />{error}</div>}
 
-      {showCreateForm && storyId !== null && (
+      {!error && (!sections || sections.length === 0) && (
+        <div className="muted">No sections yet</div>
+      )}
+
+      {showCreate && story && (
         <CreateSectionForm
-          storyId={storyId}
+          storyId={story.id}
           onSuccess={async () => {
-            setShowCreateForm(false);
-            await fetchSections(storyId);
+            setShowCreate(false);
+            await refresh(true);
             onSectionsUpdated?.();
           }}
-          onCancel={() => setShowCreateForm(false)}
+          onCancel={() => setShowCreate(false)}
         />
       )}
 
-      {/* 编辑弹窗 */}
-      {editingSection && (
-        <div style={{
-          position: 'fixed',
-          top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(0, 0, 0, 0.5)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 1000, overflow: 'auto'
-        }}>
-          <div style={{
-            background: 'white', borderRadius: '8px',
-            width: '90%', maxWidth: '900px', maxHeight: '90vh',
-            overflow: 'auto', position: 'relative',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
-          }}>
-            {/* 关闭按钮 */}
-            <button
-              onClick={() => setEditingSection(null)}
-              style={{
-                position: 'absolute', top: '10px', right: '10px',
-                width: '32px', height: '32px', borderRadius: '50%',
-                border: 'none', background: '#dc3545', color: 'white',
-                fontSize: '20px', cursor: 'pointer', zIndex: 1001,
-                display: 'flex', alignItems: 'center', justifyContent: 'center'
-              }}
-            >
-              ×
-            </button>
-            <EditSectionForm
-              section={editingSection}
-              onSuccess={async () => {
-                setEditingSection(null);
-                if (storyId !== null) await fetchSections(storyId);
-                onSectionsUpdated?.();
-              }}
-              onCancel={() => setEditingSection(null)}
-            />
-          </div>
-        </div>
+      {editing && (
+        <EditSectionForm
+          section={editing}
+          onSaved={async (next) => {
+            setEditing(null);
+            setSections((prev) => prev.map((s) => (s.id === next.id ? next : s)));
+            onSectionsUpdated?.();
+          }}
+          onCancel={() => setEditing(null)}
+        />
       )}
 
-      <div className="posts-list">
-        {sections.map(section => {
-          let sectionData;
+      <ul className="section-list">
+        {sortedSections.map((s) => {
+          let summary = '';
           try {
-            sectionData = JSON.parse(section.data);
+            const obj = s.data ? JSON.parse(s.data) : {};
+            if (s.type === 'paragraph') summary = (obj.content || '').slice(0, 60);
+            if (s.type === 'hero') summary = obj.title || '';
+            if (s.type === 'image') summary = obj.src || '';
+            if (s.type === 'pullquote') summary = obj.text || '';
+            if (s.type === 'imagegroup') summary = `${(obj.images || []).length} images`;
+            if (s.type === 'scrollytelling') summary = 'scrollytelling';
           } catch {
-            sectionData = { type: section.type };
+            summary = '[invalid json]';
           }
-
           return (
-            <div key={section.id} className="post-card">
-              <div className="post-header">
-                <h3>{section.type} (Story ID: {section.story_id})</h3>
-                <div className="post-actions">
-                  <button onClick={() => handleEdit(section)}>Edit</button>
-                  <button onClick={() => handleDelete(section.id)} className="danger">Delete</button>
-                </div>
+            <li key={s.id} className="section-item">
+              <div className="section-meta">
+                <div className="badge">#{s.id}</div>
+                <div className="type">{s.type}</div>
+                <div className="order">order: {s.sort_order}</div>
               </div>
-              <div className="post-content">
-                <p>Type: {section.type}</p>
-                <p>Sort Order: {section.sort_order}</p>
-                {section.type === 'video' && sectionData.src && (
-                  <div style={{ marginTop: '10px' }}>
-                    <video src={sectionData.src} style={{ maxWidth: '200px', maxHeight: '150px' }} controls />
-                  </div>
-                )}
-                <details>
-                  <summary>View Data</summary>
-                  <pre
-                    style={{
-                      whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-                      overflowY: 'auto', overflowX: 'hidden',
-                      maxHeight: '260px', padding: '12px',
-                      background: '#f8f9fa', borderRadius: '6px',
-                      border: '1px solid #e0e0e0', marginTop: '8px'
-                    }}
-                  >
-                    {JSON.stringify(sectionData, null, 2)}
-                  </pre>
-                </details>
+              <div className="summary">{summary}</div>
+              <div className="row">
+                <button onClick={() => setEditing(s)}>Edit</button>
+                <button className="danger" onClick={() => handleDelete(s.id)}>
+                  Delete
+                </button>
               </div>
-            </div>
+            </li>
           );
         })}
-      </div>
+      </ul>
 
-      {sections.length === 0 && (
-        <div className="empty-state">
-          <p>No sections yet</p>
-        </div>
+      {!embedded && (
+        <div className="footer-space" />
       )}
     </div>
   );
 }
 
-// 创建 Section 表单
-function CreateSectionForm({
-  storyId, onSuccess, onCancel
-}: { storyId: number; onSuccess: () => void; onCancel: () => void }) {
-  const [formData, setFormData] = useState({
-    type: 'paragraph',
-    data: '{"type":"paragraph","content":"<p>Content</p>"}',
-    sort_order: 0
-  });
-
-  const handleTypeChange = (value: string) => {
-    let defaultData = formData.data;
-    if (value === 'hero') {
-      defaultData = JSON.stringify({
-        type: 'hero',
-        title: '',
-        standfirst: '',
-        kicker: '',
-        authorLine: '',
-        backgroundColor: '#0b4635',
-        textColor: '#ffffff',
-        height: '360px',
-        alignment: 'center'
-      }, null, 2);
-    } else if (value === 'paragraph') {
-      defaultData = '{"type":"paragraph","content":"<p>Content</p>"}';
-    }
-    setFormData(prev => ({ ...prev, type: value, data: defaultData }));
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      await fetch(`${API_BASE_URL}/sections?story_id=${storyId}`, {
-        method: 'POST',
-        headers: JSON_HEADERS,
-        body: JSON.stringify({
-          type: formData.type,
-          data: formData.data,
-          sort_order: formData.sort_order
-        })
-      });
-
-      alert('Section created successfully!');
-      onSuccess();
-    } catch (err) {
-      alert('Failed to create: ' + (err as Error).message);
-    }
-  };
-
-  return (
-    <div className="form-container">
-      <h3>Create New Section</h3>
-      <form onSubmit={handleSubmit}>
-        <div className="form-group">
-          <label>Type</label>
-          <select value={formData.type} onChange={e => handleTypeChange(e.target.value)}>
-            <option value="paragraph">Paragraph</option>
-            <option value="video">Video</option>
-            <option value="image">Image</option>
-            <option value="imagegroup">Image Group</option>
-            <option value="pullquote">Pull Quote</option>
-            <option value="scrollytelling">Scrollytelling</option>
-            <option value="hero">Hero Block</option>
-          </select>
-        </div>
-        <div className="form-group">
-          <label>Data (JSON)</label>
-          <textarea
-            value={formData.data}
-            onChange={e => setFormData({ ...formData, data: e.target.value })}
-            rows={10}
-            required
-          />
-        </div>
-        <div className="form-group">
-          <label>Sort Order</label>
-          <input
-            type="number"
-            value={formData.sort_order}
-            onChange={e => setFormData({ ...formData, sort_order: parseInt(e.target.value) })}
-          />
-        </div>
-        <div className="form-actions">
-          <button type="submit">Create</button>
-          <button type="button" onClick={onCancel}>Cancel</button>
-        </div>
-      </form>
-    </div>
-  );
-}
-
-// 编辑 Section 表单（含 Video 表单与上传逻辑，保留你的原实现，仅把 API 请求头/地址统一）
-function EditSectionForm({
-  section, onSuccess, onCancel
-}: { section: Section; onSuccess: () => void; onCancel: () => void }) {
-  if (section.type === 'video') {
-    return <VideoEditForm section={section} onSuccess={onSuccess} onCancel={onCancel} />;
-  }
-  if (section.type === 'paragraph') {
-    return <ParagraphEditForm section={section} onSuccess={onSuccess} onCancel={onCancel} />;
-  }
-  if (section.type === 'imagegroup') {
-    return <ImageGroupEditForm section={section} onSuccess={onSuccess} onCancel={onCancel} />;
-  }
-  if (section.type === 'pullquote') {
-    return <PullQuoteEditForm section={section} onSuccess={onSuccess} onCancel={onCancel} />;
-  }
-  if (section.type === 'image') {
-    return <ImageEditForm section={section} onSuccess={onSuccess} onCancel={onCancel} />;
-  }
-  if (section.type === 'scrollytelling') {
-    return <ScrollytellingEditForm section={section} onSuccess={onSuccess} onCancel={onCancel} />;
-  }
-  if (section.type === 'hero') {
-    return <HeroEditForm section={section} onSuccess={onSuccess} onCancel={onCancel} />;
-  }
-
-  const [formData, setFormData] = useState({
-    type: section.type,
-    data: section.data,
-    sort_order: section.sort_order
-  });
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      await fetch(`${API_BASE_URL}/sections/${section.id}`, {
-        method: 'PATCH',
-        headers: JSON_HEADERS,
-        body: JSON.stringify(formData)
-      });
-
-      alert('Update successful!');
-      onSuccess();
-    } catch (err) {
-      alert('Failed to update: ' + (err as Error).message);
-    }
-  };
-
-  return (
-    <div className="form-container">
-      <h3>Edit Section</h3>
-      <form onSubmit={handleSubmit}>
-        <div className="form-group">
-          <label>Type</label>
-          <input
-            type="text"
-            value={formData.type}
-            onChange={e => setFormData({ ...formData, type: e.target.value })}
-            required
-          />
-        </div>
-        <div className="form-group">
-          <label>Data (JSON)</label>
-          <textarea
-            value={formData.data}
-            onChange={e => setFormData({ ...formData, data: e.target.value })}
-            rows={15}
-            required
-          />
-        </div>
-        <div className="form-group">
-          <label>Sort Order</label>
-          <input
-            type="number"
-            value={formData.sort_order}
-            onChange={e => setFormData({ ...formData, sort_order: parseInt(e.target.value) })}
-          />
-        </div>
-        <div className="form-actions">
-          <button type="submit">Save</button>
-          <button type="button" onClick={onCancel}>Cancel</button>
-        </div>
-      </form>
-    </div>
-  );
-}
-
-// Video 专用编辑表单（保留你的实现，只把上传与保存请求加上统一 headers）
-function VideoEditForm({
-  section, onSuccess, onCancel
-}: { section: Section; onSuccess: () => void; onCancel: () => void }) {
-  let initialData: any;
-  try {
-    initialData = JSON.parse(section.data);
-  } catch {
-    initialData = { type: 'video', src: '', poster: '', autoplay: false, loop: false, muted: false };
-  }
-
-  const [formData, setFormData] = useState({
-    type: 'video',
-    src: initialData.src || '',
-    poster: initialData.poster || '',
-    captions: initialData.captions || '',
-    autoplay: Boolean(initialData.autoplay),
-    loop: Boolean(initialData.loop),
-    muted: Boolean(initialData.muted),
-    credit: initialData.credit || ''
-  });
-
-  const [uploadingSrc, setUploadingSrc] = useState(false);
-  const [uploadingPoster, setUploadingPoster] = useState(false);
-  const [uploadingCaptions, setUploadingCaptions] = useState(false);
-
-  // 上传文件（视频或图片）
-  const handleFileUpload = async (file: File, field: 'src' | 'poster') => {
-    if (!file) return;
-    const isVideo = file.type.startsWith('video/');
-    const isImage = file.type.startsWith('image/');
-    if (field === 'src' && !isVideo) return alert('Please select a video file');
-    if (field === 'poster' && !isImage) return alert('Please select an image file');
-
-    try {
-      const uploadingSetter = field === 'src' ? setUploadingSrc : setUploadingPoster;
-      uploadingSetter(true);
-
-      const timestamp = Date.now();
-      const fileName = `${timestamp}-${file.name}`;
-      const targetPath = `/media/uploads/${fileName}`;
-
-      const form = new FormData();
-      form.append('file', file);
-      form.append('target_path', targetPath);
-
-      const res = await fetch(`${API_BASE_URL}/upload`, { method: 'POST', body: form, headers: { 'ngrok-skip-browser-warning': '1', 'x-requested-with': 'fetch' } });
-      if (!res.ok) {
-        const err = await res.text();
-        throw new Error(err.slice(0, 200));
-      }
-      const result = await res.json();
-      const fileUrl = result.url;
-
-      if (field === 'src') setFormData(prev => ({ ...prev, src: fileUrl }));
-      else setFormData(prev => ({ ...prev, poster: fileUrl }));
-
-      alert(`Upload successful! File saved to: ${fileUrl}`);
-      uploadingSetter(false);
-    } catch (err) {
-      alert('Upload failed: ' + (err as Error).message);
-      const uploadingSetter = field === 'src' ? setUploadingSrc : setUploadingPoster;
-      uploadingSetter(false);
-    }
-  };
-
-  // 上传字幕文件（.vtt / .srt）
-  const handleCaptionsUpload = async (file: File) => {
-    if (!file) return;
-    const valid = file.name.toLowerCase().endsWith('.vtt') || file.name.toLowerCase().endsWith('.srt');
-    if (!valid) return alert('Please upload a .vtt or .srt file');
-
-    try {
-      setUploadingCaptions(true);
-
-      const timestamp = Date.now();
-      const fileName = `${timestamp}-${file.name}`;
-      const targetPath = `/media/uploads/${fileName}`;
-
-      const form = new FormData();
-      form.append('file', file);
-      form.append('target_path', targetPath);
-
-      const res = await fetch(`${API_BASE_URL}/upload`, { method: 'POST', body: form, headers: { 'ngrok-skip-browser-warning': '1', 'x-requested-with': 'fetch' } });
-      if (!res.ok) {
-        const err = await res.text();
-        throw new Error(err.slice(0, 200));
-      }
-      const result = await res.json();
-
-      setFormData(prev => ({ ...prev, captions: result.url }));
-      alert('Captions uploaded successfully!');
-    } catch (err) {
-      alert('Failed to upload captions: ' + (err as Error).message);
-    } finally {
-      setUploadingCaptions(false);
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const dataJson = JSON.stringify(formData, null, 2);
-      await fetch(`${API_BASE_URL}/sections/${section.id}`, {
-        method: 'PATCH',
-        headers: JSON_HEADERS,
-        body: JSON.stringify({
-          type: formData.type,
-          data: dataJson,
-          sort_order: section.sort_order
-        })
-      });
-
-      alert('Update successful!');
-      onSuccess();
-    } catch (err) {
-      alert('Failed to update: ' + (err as Error).message);
-    }
-  };
-
-  const getYoutubeId = (s: string) => {
-    try {
-      const u = new URL(s);
-      if (u.hostname.includes('youtube.com')) return u.searchParams.get('v');
-      if (u.hostname === 'youtu.be') return u.pathname.slice(1) || null;
-    } catch {}
-    return null;
-  };
-
-  return (
-    <div className="form-container" style={{ maxWidth: '800px', margin: '40px 20px 20px 20px' }}>
-      <h3>Edit Video Section</h3>
-      <form onSubmit={handleSubmit}>
-        {/* 下面表单与你原逻辑一致 */}
-        <div className="form-group">
-          <label>Video URL (src)</label>
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
-            <input
-              type="text"
-              value={formData.src}
-              onChange={e => setFormData({ ...formData, src: e.target.value })}
-              placeholder="e.g.: /media/demo/hero.mp4"
-              style={{ flex: 1 }}
-            />
-            <div>
-              <input type="file" accept="video/*" onChange={(e) => { const file = e.target.files?.[0]; if (file) handleFileUpload(file, 'src'); }} style={{ display: 'none' }} id="video-upload" />
-              <label htmlFor="video-upload" className="upload-button">{uploadingSrc ? 'Uploading...' : '📤 Upload Video'}</label>
-            </div>
-          </div>
-
-          {formData.src && (
-            <div style={{ marginTop: '10px' }}>
-              {(() => {
-                const id = getYoutubeId(formData.src);
-                if (id) {
-                  const qs = new URLSearchParams({ rel: '0', playsinline: '1' });
-                  const embed = `https://www.youtube.com/embed/${id}?${qs.toString()}`;
-                  return (
-                    <iframe
-                      src={embed}
-                      title="YouTube preview"
-                      style={{ width: 300, height: 200, border: 0 }}
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                      referrerPolicy="strict-origin-when-cross-origin"
-                      allowFullScreen
-                    />
-                  );
-                }
-                return <video src={formData.src} controls style={{ maxWidth: 300, maxHeight: 200 }} preload="metadata" />;
-              })()}
-            </div>
-          )}
-        </div>
-
-        <div className="form-group">
-          <label>Poster URL (poster)</label>
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
-            <input type="text" value={formData.poster} onChange={e => setFormData({ ...formData, poster: e.target.value })} placeholder="e.g.: /media/demo/poster.jpg" style={{ flex: 1 }} />
-            <div>
-              <input type="file" accept="image/*" onChange={(e) => { const file = e.target.files?.[0]; if (file) handleFileUpload(file, 'poster'); }} style={{ display: 'none' }} id="poster-upload" />
-              <label htmlFor="poster-upload" className="upload-button">{uploadingPoster ? 'Uploading...' : '📤 Upload Image'}</label>
-            </div>
-          </div>
-          {formData.poster && <div style={{ marginTop: '10px' }}><img src={formData.poster} alt="Poster" style={{ maxWidth: '300px', maxHeight: '200px' }} /></div>}
-        </div>
-
-        <div className="form-group">
-          <label>Captions URL (optional)</label>
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
-            <input type="text" value={formData.captions} onChange={e => setFormData({ ...formData, captions: e.target.value })} placeholder="e.g.: /media/demo/captions.vtt" style={{ flex: 1 }} />
-            <div>
-              <input type="file" accept=".vtt,.srt,text/vtt,application/x-subrip" onChange={(e) => { const file = e.target.files?.[0]; if (file) handleCaptionsUpload(file); }} style={{ display: 'none' }} id="captions-upload" />
-              <label htmlFor="captions-upload" className="upload-button">{uploadingCaptions ? 'Uploading...' : '📤 Upload Captions'}</label>
-            </div>
-          </div>
-          {formData.captions && <div style={{ marginTop: '8px', fontSize: '13px', color: '#555' }}>Current file: {formData.captions}</div>}
-        </div>
-
-        <div className="form-group">
-          <label>Credit (optional)</label>
-          <input type="text" value={formData.credit} onChange={e => setFormData({ ...formData, credit: e.target.value })} placeholder="Video: Coast Guard Maritime Operations / John Doe" />
-        </div>
-
-        <div className="form-group" style={{ display: 'flex', gap: '20px' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <input type="checkbox" checked={formData.autoplay} onChange={e => setFormData({ ...formData, autoplay: e.target.checked })} />
-            Autoplay
-          </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <input type="checkbox" checked={formData.loop} onChange={e => setFormData({ ...formData, loop: e.target.checked })} />
-            Loop
-          </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <input type="checkbox" checked={formData.muted} onChange={e => setFormData({ ...formData, muted: e.target.checked })} />
-            Muted
-          </label>
-        </div>
-
-        <div className="form-actions">
-          <button type="submit">Save</button>
-          <button type="button" onClick={onCancel}>Cancel</button>
-        </div>
-      </form>
-    </div>
-  );
+/* =========================================================
+   轻量样式（可删除；仅帮助在无样式环境下可读）
+   ========================================================= */
+const css = `
+.editor-container{max-width:980px;margin:0 auto;padding:16px}
+.editor-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.editor-actions button{margin-left:8px}
+.loading{padding:32px 0;color:#666}
+.error-message{color:#b00020;background:#ffecec;padding:12px;border-radius:8px;margin:8px 0;white-space:pre-wrap}
+.muted{color:#888;margin:8px 0}
+.panel{border:1px solid #e7e7e7;border-radius:12px;padding:12px;margin:12px 0}
+.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.form-grid label{display:flex;flex-direction:column;font-size:14px}
+.form-grid input,.form-grid select,.block textarea,.form-grid textarea{margin-top:6px;padding:8px;border:1px solid #ddd;border-radius:8px}
+.block{display:block;margin:8px 0}
+.stack{display:grid;gap:12px}
+.row{display:flex;gap:8px;align-items:center;margin-top:8px}
+button{padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff;cursor:pointer}
+button:hover{background:#f6f6f6}
+button.secondary{color:#444}
+button.danger{color:#b00020;border-color:#f3c2c2}
+.card{border:1px solid #eee;border-radius:8px;padding:8px}
+.section-list{display:grid;gap:10px;margin-top:12px}
+.section-item{border:1px solid #eee;border-radius:12px;padding:10px}
+.section-meta{display:flex;gap:10px;align-items:center;margin-bottom:6px}
+.badge{background:#f2f3f5;border-radius:999px;padding:0 8px}
+.type{font-weight:600}
+.json-preview{background:#0b1020;color:#cad3ff;border-radius:8px;padding:8px;overflow:auto}
+.footer-space{height:32px}
+`;
+if (typeof document !== 'undefined' && !document.getElementById('pe-lite-style')) {
+  const el = document.createElement('style');
+  el.id = 'pe-lite-style';
+  el.textContent = css;
+  document.head.appendChild(el);
 }
