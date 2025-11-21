@@ -1,6 +1,7 @@
 # backend/main.py
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from pathlib import Path, PurePosixPath
@@ -28,9 +29,9 @@ app.add_middleware(
     allow_origins=allow_origins,
     allow_origin_regex=ALLOW_ORIGIN_REGEX,  # 可选：放宽到任意 *.github.io
     allow_credentials=False,  # 你没用 cookie/凭证就设 False，便于使用通配
-    allow_methods=["*"],      # 允许所有方法（含预检需要的 OPTIONS）
+    allow_methods=["GET", "HEAD", "OPTIONS", "POST", "PATCH", "DELETE"],      # 允许所有方法（含预检需要的 OPTIONS）
     allow_headers=["*"],      # 允许所有头
-    expose_headers=["*"],             # 可选：前端若需读取自定义响应头
+    # expose_headers=["*"],             # 可选：前端若需读取自定义响应头
     max_age=86400, 
 )
 
