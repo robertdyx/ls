@@ -1,67 +1,67 @@
-// src/lib/fetcher.ts
-// 统一提供 API 基址 & 公共请求工具（含 ngrok 绕过头）
-
-/** 解析 ?api= 参数；未提供时回落到本地 8888 端口 */
-function detectApiBase(): string {
-  try {
-    const u = new URL(window.location.href);
-    const raw = u.searchParams.get('api')?.trim();
-    if (raw) return raw.replace(/\/+$/, '');
-  } catch {}
-  // 本地开发回退
-  return 'http://localhost:8888';
-}
-
-let API_BASE = detectApiBase();
-
-/** 给外部使用（例如 App.tsx / PostEditor.tsx） */
+// frontend/src/lib/fetcher.ts
+/** 解析 ?api=...，默认回落到同源或本地开发端口 */
 export function getApiBase(): string {
-  return API_BASE;
+  const m = new URLSearchParams(location.search).get("api");
+  if (m) return decodeURIComponent(m);
+  // gh-pages 无后端，同源仅用于本地联调
+  return `${location.protocol}//${location.hostname}:8888`;
 }
 
-/** 可在运行时切换（极少用到） */
-export function setApiBase(next: string) {
-  API_BASE = (next || '').replace(/\/+$/, '');
+/** 统一加头，解决 ngrok 的防滥用提示页 */
+async function request(input: RequestInfo, init: RequestInit = {}) {
+  const headers = new Headers(init.headers || {});
+  headers.set("ngrok-skip-browser-warning", "1");
+  headers.set("x-requested-with", "fetch");
+  return fetch(input, { ...init, headers });
 }
 
-// —— 通用头：绕过 ngrok 免费域的浏览器警告页 —— //
-const NGROK_HEADERS: HeadersInit = {
-  'ngrok-skip-browser-warning': '1',
-  'x-requested-with': 'fetch',
-};
-
-/** 简单 GET JSON：用于拉取 story */
+/** 拉取 story（前台渲染用） */
 export async function fetchStory() {
-  const url = `${getApiBase()}/story`;
-  const res = await fetch(url, { headers: NGROK_HEADERS, mode: 'cors', credentials: 'omit' });
-  const ctype = res.headers.get('content-type') || '';
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Failed to fetch story: HTTP ${res.status}. ${text.slice(0, 200)}`);
-  }
-  if (!ctype.includes('application/json')) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Expect JSON but got ${ctype || 'unknown'}: ${text.slice(0, 120)}`);
-  }
+  const base = getApiBase();
+  const res = await request(`${base}/story`);
+  if (!res.ok) throw new Error(`GET /story ${res.status}`);
   return res.json();
 }
 
-/** 通用 fetch 封装（可选） */
-export async function fetchJson(input: RequestInfo | URL, init: RequestInit = {}) {
-  const res = await fetch(input, {
-    mode: 'cors',
-    credentials: 'omit',
-    headers: { ...NGROK_HEADERS, ...(init.headers || {}) },
-    ...init,
+/** 右侧编辑器：列出 sections */
+export async function listSections(params: { story_id?: number } = {}) {
+  const base = getApiBase();
+  const q = new URLSearchParams();
+  if (params.story_id) q.set("story_id", String(params.story_id));
+  const url = q.toString() ? `${base}/sections?${q}` : `${base}/sections`;
+  const res = await request(url);
+  if (!res.ok) throw new Error(`GET /sections ${res.status}`);
+  return res.json();
+}
+
+/** 新增 section */
+export async function createSection(storyId: number, payload: { type: string; data?: string; sort_order?: number }) {
+  const base = getApiBase();
+  const res = await request(`${base}/sections?story_id=${storyId}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
   });
-  const ctype = res.headers.get('content-type') || '';
-  const payload = ctype.includes('application/json') ? await res.json() : await res.text();
-  if (!res.ok) {
-    throw new Error(
-      `HTTP ${res.status} ${res.statusText} – ${
-        typeof payload === 'string' ? payload.slice(0, 200) : JSON.stringify(payload).slice(0, 200)
-      }`
-    );
-  }
-  return payload;
+  if (!res.ok) throw new Error(`POST /sections ${res.status} ${await res.text()}`);
+  return res.json();
+}
+
+/** 更新 section */
+export async function updateSection(id: number, payload: { type?: string; data?: string; sort_order?: number }) {
+  const base = getApiBase();
+  const res = await request(`${base}/sections/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`PATCH /sections/${id} ${res.status} ${await res.text()}`);
+  return res.json();
+}
+
+/** 删除 section */
+export async function deleteSection(id: number) {
+  const base = getApiBase();
+  const res = await request(`${base}/sections/${id}`, { method: "DELETE" });
+  if (!res.ok) throw new Error(`DELETE /sections/${id} ${res.status}`);
+  return res.json();
 }
