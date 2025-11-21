@@ -1,98 +1,67 @@
 // src/lib/fetcher.ts
+// 统一提供 API 基址 & 公共请求工具（含 ngrok 绕过头）
 
-/**
- * 统一的后端基址解析：
- * 1) 优先取 URL ?api= 参数
- * 2) 其次取 localStorage('apiBase')
- * 3) 最后回落到 http://localhost:8888
- */
-export function getApiBase(): string {
+/** 解析 ?api= 参数；未提供时回落到本地 8888 端口 */
+function detectApiBase(): string {
   try {
     const u = new URL(window.location.href);
-    const fromQuery = u.searchParams.get('api')?.trim();
-    const fromStorage = localStorage.getItem('apiBase')?.trim();
-
-    let base =
-      (fromQuery && fromQuery.length > 0 ? fromQuery : fromStorage) ||
-      (location.hostname === 'localhost' ? 'http://localhost:8888' : 'http://localhost:8888');
-
-    // 去掉尾部斜杠
-    base = base.replace(/\/+$/, '');
-    return base;
-  } catch {
-    return 'http://localhost:8888';
-  }
+    const raw = u.searchParams.get('api')?.trim();
+    if (raw) return raw.replace(/\/+$/, '');
+  } catch {}
+  // 本地开发回退
+  return 'http://localhost:8888';
 }
 
-// 兼容旧代码：保留一个别名（有人可能还在用 getApiBaseUrl）
-export const getApiBaseUrl = getApiBase;
+let API_BASE = detectApiBase();
 
-// 统一 headers：用于绕过 ngrok 免费域拦截页，并标记为 fetch 请求
-export const COMMON_HEADERS: Record<string, string> = {
+/** 给外部使用（例如 App.tsx / PostEditor.tsx） */
+export function getApiBase(): string {
+  return API_BASE;
+}
+
+/** 可在运行时切换（极少用到） */
+export function setApiBase(next: string) {
+  API_BASE = (next || '').replace(/\/+$/, '');
+}
+
+// —— 通用头：绕过 ngrok 免费域的浏览器警告页 —— //
+const NGROK_HEADERS: HeadersInit = {
   'ngrok-skip-browser-warning': '1',
   'x-requested-with': 'fetch',
 };
 
-// 辅助函数：以 JSON 方式请求，自动拼接基址、自动检查 content-type
-async function fetchJson(pathOrUrl: string, init: RequestInit = {}) {
-  const isAbs = /^https?:\/\//i.test(pathOrUrl);
-  const url = isAbs ? pathOrUrl : `${getApiBase()}${pathOrUrl.startsWith('/') ? pathOrUrl : `/${pathOrUrl}`}`;
-
-  const res = await fetch(url, {
-    // 以不携带 cookie 的 CORS 请求访问
-    mode: 'cors',
-    credentials: 'omit',
-    // 合并并保留调用方自定义的 headers
-    headers: {
-      ...COMMON_HEADERS,
-      ...(init.headers || {}),
-    },
-    ...init,
-  });
-
+/** 简单 GET JSON：用于拉取 story */
+export async function fetchStory() {
+  const url = `${getApiBase()}/story`;
+  const res = await fetch(url, { headers: NGROK_HEADERS, mode: 'cors', credentials: 'omit' });
   const ctype = res.headers.get('content-type') || '';
-  const isJson = ctype.includes('application/json');
-
   if (!res.ok) {
-    const brief = isJson ? JSON.stringify(await res.json()) : (await res.text()).slice(0, 200);
-    throw new Error(`HTTP ${res.status} ${res.statusText} – ${brief}`);
+    const text = await res.text().catch(() => '');
+    throw new Error(`Failed to fetch story: HTTP ${res.status}. ${text.slice(0, 200)}`);
   }
-
-  if (!isJson) {
-    const text = await res.text();
-    // 这里直接抛错能帮助定位被拦截或返回 HTML 的问题
-    const head = text.slice(0, 200);
-    throw new Error(`Expect JSON but got ${ctype || 'unknown'} – head: ${head}`);
+  if (!ctype.includes('application/json')) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Expect JSON but got ${ctype || 'unknown'}: ${text.slice(0, 120)}`);
   }
-
   return res.json();
 }
 
-/** 拉取 story.json（/story） */
-export async function fetchStory() {
-  return fetchJson('/story', { method: 'GET' });
-}
-
-/** 也导出一个可复用的 JSON 请求工具，给其他模块用（可选） */
-export async function apiGet(path: string, init: RequestInit = {}) {
-  return fetchJson(path, { method: 'GET', ...init });
-}
-export async function apiPost(path: string, body: any, init: RequestInit = {}) {
-  return fetchJson(path, {
-    method: 'POST',
-    body: typeof body === 'string' ? body : JSON.stringify(body),
-    headers: { 'Content-Type': 'application/json' },
+/** 通用 fetch 封装（可选） */
+export async function fetchJson(input: RequestInfo | URL, init: RequestInit = {}) {
+  const res = await fetch(input, {
+    mode: 'cors',
+    credentials: 'omit',
+    headers: { ...NGROK_HEADERS, ...(init.headers || {}) },
     ...init,
   });
-}
-export async function apiPatch(path: string, body: any, init: RequestInit = {}) {
-  return fetchJson(path, {
-    method: 'PATCH',
-    body: typeof body === 'string' ? body : JSON.stringify(body),
-    headers: { 'Content-Type': 'application/json' },
-    ...init,
-  });
-}
-export async function apiDelete(path: string, init: RequestInit = {}) {
-  return fetchJson(path, { method: 'DELETE', ...init });
+  const ctype = res.headers.get('content-type') || '';
+  const payload = ctype.includes('application/json') ? await res.json() : await res.text();
+  if (!res.ok) {
+    throw new Error(
+      `HTTP ${res.status} ${res.statusText} – ${
+        typeof payload === 'string' ? payload.slice(0, 200) : JSON.stringify(payload).slice(0, 200)
+      }`
+    );
+  }
+  return payload;
 }
