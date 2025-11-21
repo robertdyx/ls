@@ -7,13 +7,13 @@ import { getApiBase } from '../lib/fetcher';
    ========================================================= */
 const API_BASE_URL = getApiBase();
 
-const GET_HEADERS = {
+const NGROK_GET_HEADERS = {
   'ngrok-skip-browser-warning': '1',
   'x-requested-with': 'fetch',
 } as const;
 
-const JSON_HEADERS = {
-  ...GET_HEADERS,
+const NGROK_JSON_HEADERS = {
+  ...NGROK_GET_HEADERS,
   'Content-Type': 'application/json',
 } as const;
 
@@ -21,7 +21,7 @@ async function fetchAsJson(url: string, init?: RequestInit) {
   const res = await fetch(url, {
     mode: 'cors',
     credentials: 'omit',
-    headers: { ...GET_HEADERS, ...(init?.headers || {}) },
+    headers: { ...NGROK_GET_HEADERS, ...(init?.headers || {}) },
     ...init,
   });
   const ctype = res.headers.get('content-type') || '';
@@ -40,8 +40,13 @@ async function sendJson(url: string, method: 'POST' | 'PATCH' | 'DELETE', body?:
     method,
     mode: 'cors',
     credentials: 'omit',
-    headers: JSON_HEADERS,
-    body: body == null ? undefined : typeof body === 'string' ? body : JSON.stringify(body),
+    headers: NGROK_JSON_HEADERS,
+    body:
+      body == null
+        ? undefined
+        : typeof body === 'string'
+        ? body
+        : JSON.stringify(body),
   });
   const ctype = res.headers.get('content-type') || '';
   const isJson = ctype.includes('application/json');
@@ -64,13 +69,14 @@ type SectionType =
   | 'imagegroup'
   | 'pullquote'
   | 'scrollytelling'
-  | string; // 预留以后拓展
+  | string;
 
 interface Section {
   id: number;
   story_id: number;
   type: SectionType;
-  data: string; // 后端存 JSON 字符串
+  /** 后端表里多为 content(Text)。为兼容旧数据，下面渲染时仍从 JSON 内部取具体字段 */
+  content: string; // 保存时是 JSON 字符串
   sort_order: number;
 }
 
@@ -81,10 +87,8 @@ interface Story {
 }
 
 /* =========================================================
-   子表单：基础字段定义
-   - 简化了复杂结构；复杂内容（如 scrollytelling）提供 JSON 编辑模式
+   子表单（略）—— 和你当前版本一致
    ========================================================= */
-
 // ---------- Hero ----------
 type HeroData = {
   title?: string;
@@ -93,14 +97,7 @@ type HeroData = {
   kicker?: string;
   authorLine?: string;
 };
-
-function HeroEditForm({
-  value,
-  onChange,
-}: {
-  value: HeroData;
-  onChange: (v: HeroData) => void;
-}) {
+function HeroEditForm({ value, onChange }: { value: HeroData; onChange: (v: HeroData) => void }) {
   return (
     <div className="form-grid">
       <label>
@@ -149,7 +146,6 @@ function HeroEditForm({
 
 // ---------- Paragraph ----------
 type ParagraphData = { content?: string };
-
 function ParagraphEditForm({
   value,
   onChange,
@@ -178,14 +174,7 @@ type ImageData = {
   credit?: string;
   layout?: 'default' | 'third' | 'inline';
 };
-
-function ImageEditForm({
-  value,
-  onChange,
-}: {
-  value: ImageData;
-  onChange: (v: ImageData) => void;
-}) {
+function ImageEditForm({ value, onChange }: { value: ImageData; onChange: (v: ImageData) => void }) {
   return (
     <div className="form-grid">
       <label>
@@ -238,7 +227,6 @@ function ImageEditForm({
 // ---------- ImageGroup ----------
 type ImageGroupItem = { src?: string; alt?: string; caption?: string; credit?: string };
 type ImageGroupData = { images?: ImageGroupItem[] };
-
 function ImageGroupEditForm({
   value,
   onChange,
@@ -247,12 +235,10 @@ function ImageGroupEditForm({
   onChange: (v: ImageGroupData) => void;
 }) {
   const images = value.images || [];
-
   const updateAt = (idx: number, patch: Partial<ImageGroupItem>) => {
     const next = images.map((it, i) => (i === idx ? { ...it, ...patch } : it));
     onChange({ images: next });
   };
-
   return (
     <div className="stack">
       {images.map((img, i) => (
@@ -292,20 +278,13 @@ function ImageGroupEditForm({
             </label>
           </div>
           <div className="row">
-            <button
-              type="button"
-              className="danger"
-              onClick={() => onChange({ images: images.filter((_, idx) => idx !== i) })}
-            >
+            <button type="button" className="danger" onClick={() => onChange({ images: images.filter((_, idx) => idx !== i) })}>
               Remove
             </button>
           </div>
         </div>
       ))}
-      <button
-        type="button"
-        onClick={() => onChange({ images: [...images, { src: '', alt: '' }] })}
-      >
+      <button type="button" onClick={() => onChange({ images: [...images, { src: '', alt: '' }] })}>
         + Add Image
       </button>
     </div>
@@ -314,7 +293,6 @@ function ImageGroupEditForm({
 
 // ---------- PullQuote ----------
 type PullQuoteData = { text?: string; attribution?: string };
-
 function PullQuoteEditForm({
   value,
   onChange,
@@ -344,9 +322,8 @@ function PullQuoteEditForm({
   );
 }
 
-// ---------- Scrollytelling（复杂：提供 JSON 区域） ----------
+// ---------- Scrollytelling ----------
 type ScrollytellingData = Record<string, any>;
-
 function ScrollytellingEditForm({
   value,
   onChange,
@@ -358,7 +335,6 @@ function ScrollytellingEditForm({
   useEffect(() => {
     setRaw(JSON.stringify(value || {}, null, 2));
   }, [value]);
-
   return (
     <label className="block">
       JSON
@@ -370,7 +346,6 @@ function ScrollytellingEditForm({
           try {
             onChange(JSON.parse(raw || '{}'));
           } catch {
-            // 保持原值，给出轻提示
             alert('Invalid JSON in scrollytelling editor. Please fix it.');
           }
         }}
@@ -381,7 +356,7 @@ function ScrollytellingEditForm({
 }
 
 /* =========================================================
-   通用：Section 表单容器（选择类型 + 对应子表单 + 排序）
+   Section 表单容器
    ========================================================= */
 function SectionTypeForm({
   type,
@@ -398,7 +373,6 @@ function SectionTypeForm({
   onDataChange: (json: string) => void;
   onSortChange: (n: number) => void;
 }) {
-  // 解析 JSON（失败则空对象）
   const dataObj = useMemo(() => {
     try {
       return valueJson ? JSON.parse(valueJson) : {};
@@ -435,16 +409,11 @@ function SectionTypeForm({
         </label>
       </div>
 
-      {/* 根据类型渲染子表单 */}
-      {type === 'hero' && (
-        <HeroEditForm value={dataObj as HeroData} onChange={setDataObj} />
-      )}
+      {type === 'hero' && <HeroEditForm value={dataObj as HeroData} onChange={setDataObj} />}
       {type === 'paragraph' && (
         <ParagraphEditForm value={dataObj as ParagraphData} onChange={setDataObj} />
       )}
-      {type === 'image' && (
-        <ImageEditForm value={dataObj as ImageData} onChange={setDataObj} />
-      )}
+      {type === 'image' && <ImageEditForm value={dataObj as ImageData} onChange={setDataObj} />}
       {type === 'imagegroup' && (
         <ImageGroupEditForm value={dataObj as ImageGroupData} onChange={setDataObj} />
       )}
@@ -452,13 +421,9 @@ function SectionTypeForm({
         <PullQuoteEditForm value={dataObj as PullQuoteData} onChange={setDataObj} />
       )}
       {type === 'scrollytelling' && (
-        <ScrollytellingEditForm
-          value={dataObj as ScrollytellingData}
-          onChange={setDataObj}
-        />
+        <ScrollytellingEditForm value={dataObj as ScrollytellingData} onChange={setDataObj} />
       )}
 
-      {/* 原始 JSON 预览（可折叠，这里简单展示） */}
       <details>
         <summary>Raw JSON (readonly preview)</summary>
         <pre className="json-preview">{valueJson || '{}'}</pre>
@@ -487,11 +452,12 @@ function CreateSectionForm({
   const submit = async () => {
     try {
       setBusy(true);
-      // 校验 JSON
-      JSON.parse(data || '{}');
+      JSON.parse(data || '{}'); // 校验 JSON
+      // 兼容后端：同时给 content 与 data；后端任选其一即可
       await sendJson(`${API_BASE_URL}/sections`, 'POST', {
         story_id: storyId,
         type,
+        content: data,
         data,
         sort_order: sortOrder,
       });
@@ -536,7 +502,7 @@ function EditSectionForm({
   onCancel: () => void;
 }) {
   const [type, setType] = useState<SectionType>(section.type);
-  const [data, setData] = useState<string>(section.data || '{}');
+  const [data, setData] = useState<string>(section.content || '{}');
   const [sortOrder, setSortOrder] = useState<number>(section.sort_order || 0);
   const [busy, setBusy] = useState(false);
 
@@ -546,7 +512,8 @@ function EditSectionForm({
       JSON.parse(data || '{}');
       const payload = await sendJson(`${API_BASE_URL}/sections/${section.id}`, 'PATCH', {
         type,
-        data,
+        content: data,
+        data, // 兼容字段
         sort_order: sortOrder,
       });
       onSaved(payload);
@@ -600,15 +567,12 @@ export default function PostEditor({
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState<Section | null>(null);
 
-  // 拉取 story + sections
   const refresh = async (skipSpinner = false) => {
     try {
       if (!skipSpinner) setLoading(true);
       const s: Story = await fetchAsJson(`${API_BASE_URL}/story`);
       setStory(s);
-      const list: Section[] = await fetchAsJson(
-        `${API_BASE_URL}/sections?story_id=${s.id}`
-      );
+      const list: Section[] = await fetchAsJson(`${API_BASE_URL}/sections?story_id=${s.id}`);
       setSections(list);
       setError(null);
     } catch (err) {
@@ -695,7 +659,7 @@ export default function PostEditor({
         {sortedSections.map((s) => {
           let summary = '';
           try {
-            const obj = s.data ? JSON.parse(s.data) : {};
+            const obj = s.content ? JSON.parse(s.content) : {};
             if (s.type === 'paragraph') summary = (obj.content || '').slice(0, 60);
             if (s.type === 'hero') summary = obj.title || '';
             if (s.type === 'image') summary = obj.src || '';
@@ -724,15 +688,13 @@ export default function PostEditor({
         })}
       </ul>
 
-      {!embedded && (
-        <div className="footer-space" />
-      )}
+      {!embedded && <div className="footer-space" />}
     </div>
   );
 }
 
 /* =========================================================
-   轻量样式（可删除；仅帮助在无样式环境下可读）
+   轻量样式（保留）
    ========================================================= */
 const css = `
 .editor-container{max-width:980px;margin:0 auto;padding:16px}
