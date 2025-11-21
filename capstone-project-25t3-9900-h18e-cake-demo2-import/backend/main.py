@@ -37,6 +37,10 @@ app.add_middleware(
 )
 
 # --- end CORS ---
+MEDIA_ROOT = Path("media")
+UPLOAD_DIR = MEDIA_ROOT / "uploads"
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/media", StaticFiles(directory=str(MEDIA_ROOT)), name="media")
 
 
 backend_dir = Path(__file__).resolve().parent
@@ -164,50 +168,85 @@ def delete_post(post_id: int, db: Session = Depends(get_db)):
 #         shutil.copyfileobj(file.file, buf)
 #     return {"success": True, "url": "/" + str(pure), "filename": full.name}
 
-PUBLIC_DIR = (project_root / "capstone-frontend" / "public").resolve()
-UPLOAD_DIR = (PUBLIC_DIR / "media" / "uploads")
+# PUBLIC_DIR = (project_root / "capstone-frontend" / "public").resolve()
+# UPLOAD_DIR = (PUBLIC_DIR / "media" / "uploads")
 
-def _safe_name(name: str) -> str:
-    # 简单清洗文件名
-    base = re.sub(r"[^A-Za-z0-9._-]+", "-", name).strip("-")
-    if not base:
-        base = "upload"
-    return base
+
+# def _safe_name(name: str) -> str:
+#     # 简单清洗文件名
+#     base = re.sub(r"[^A-Za-z0-9._-]+", "-", name).strip("-")
+#     if not base:
+#         base = "upload"
+#     return base
+
+_slug_re = re.compile(r"[^a-zA-Z0-9._-]+")
+def _safe_name(original: str) -> str:
+    """
+    将原始文件名清洗为安全文件名：仅保留字母/数字/点/下划线/短横线
+    """
+    name = original.strip().replace(" ", "-")
+    name = _slug_re.sub("-", name)
+    return name
         
-def _ensure_dirs():
-    PUBLIC_DIR.mkdir(parents=True, exist_ok=True)
-    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+# def _ensure_dirs():
+#     PUBLIC_DIR.mkdir(parents=True, exist_ok=True)
+#     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
-@app.post("/upload")
-async def upload_file(file: UploadFile = File(...), target_path: str = Form(...)):
-    """
-    高级上传：前端明确指定 target_path（如 /media/uploads/xxx.jpg）
-    """
-    _ensure_dirs()
-    pure = PurePosixPath(target_path.lstrip("/"))
-    full = (PUBLIC_DIR / Path(*pure.parts)).resolve()
-    if PUBLIC_DIR not in full.parents and full != PUBLIC_DIR:
-        raise HTTPException(status_code=400, detail="target_path out of public dir")
-    with open(full, "wb") as buf:
-        buf.write(await file.read())
-    return {"success": True, "url": "/" + str(pure), "filename": full.name}
+# @app.post("/upload")
+# async def upload_file(file: UploadFile = File(...), target_path: str = Form(...)):
+#     """
+#     高级上传：前端明确指定 target_path（如 /media/uploads/xxx.jpg）
+#     """
+#     _ensure_dirs()
+#     pure = PurePosixPath(target_path.lstrip("/"))
+#     full = (PUBLIC_DIR / Path(*pure.parts)).resolve()
+#     if PUBLIC_DIR not in full.parents and full != PUBLIC_DIR:
+#         raise HTTPException(status_code=400, detail="target_path out of public dir")
+#     with open(full, "wb") as buf:
+#         buf.write(await file.read())
+#     return {"success": True, "url": "/" + str(pure), "filename": full.name}
+
+# @app.post("/files")
+# async def upload_file_simple(file: UploadFile = File(...)):
+#     """
+#     兼容端点：前端只传 file。后端自动把文件存到 /media/uploads/ 下，并返回 {path: "/media/uploads/xxx"}。
+#     这样现有前端 ImageEditForm.tsx 的 `${apiBase}/files` 可以直接使用。
+#     """
+#     _ensure_dirs()
+#     ext = Path(file.filename or "").suffix or ".bin"
+#     ts = str(int(time.time() * 1000))
+#     name = _safe_name(Path(file.filename or "upload").stem)
+#     final = f"{ts}-{name}{ext}"
+#     full = (UPLOAD_DIR / final).resolve()
+#     with open(full, "wb") as buf:
+#         buf.write(await file.read())
+#     rel = "/media/uploads/" + final
+#     return {"path": rel, "url": rel}
 
 @app.post("/files")
-async def upload_file_simple(file: UploadFile = File(...)):
+async def upload_file(file: UploadFile = File(...)):
     """
-    兼容端点：前端只传 file。后端自动把文件存到 /media/uploads/ 下，并返回 {path: "/media/uploads/xxx"}。
-    这样现有前端 ImageEditForm.tsx 的 `${apiBase}/files` 可以直接使用。
+    接收 multipart/form-data 的文件，保存到 media/uploads 下，
+    返回可直接用于前端 <img> 的相对 URL（如 /media/uploads/xxx.png）
     """
-    _ensure_dirs()
-    ext = Path(file.filename or "").suffix or ".bin"
-    ts = str(int(time.time() * 1000))
-    name = _safe_name(Path(file.filename or "upload").stem)
-    final = f"{ts}-{name}{ext}"
-    full = (UPLOAD_DIR / final).resolve()
-    with open(full, "wb") as buf:
-        buf.write(await file.read())
-    rel = "/media/uploads/" + final
-    return {"path": rel, "url": rel}
+    if not file or not file.filename:
+        raise HTTPException(status_code=400, detail="no file")
+
+    ts = int(time.time() * 1000)
+    safe = _safe_name(file.filename)
+    target = UPLOAD_DIR / f"{ts}-{safe}"
+
+    try:
+        with target.open("wb") as out:
+            shutil.copyfileobj(file.file, out)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"save failed: {e}")
+
+    # 返回相对路径；前端可直接拼接 apiBase 预览（也支持直接相对引用）
+    return JSONResponse(
+        {"url": f"/media/uploads/{target.name}"},
+        headers={"Cache-Control": "no-cache"},
+    )
 
 if __name__ == "__main__":
     import uvicorn
