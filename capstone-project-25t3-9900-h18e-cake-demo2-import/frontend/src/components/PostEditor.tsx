@@ -14,15 +14,6 @@ const GET_HEADERS = {
   'x-requested-with': 'fetch',
 } as const;
 
-function absolutize(u: string) {
-  const apiBase = getApiBase();
-  if (!u) return "";
-  if (/^https?:\/\//i.test(u)) return u;
-  const b = apiBase.replace(/\/$/, "");
-  const p = u.startsWith("/") ? u : `/${u}`;
-  return `${b}${p}`;
-}
-
 const JSON_HEADERS = {
   ...GET_HEADERS,
   'Content-Type': 'application/json',
@@ -30,8 +21,8 @@ const JSON_HEADERS = {
 
 async function fetchAsJson(url: string, init?: RequestInit) {
   const res = await fetch(url, {
-    mode: 'cors',
-    credentials: 'omit',
+    // mode: 'cors',
+    // credentials: 'omit',
     headers: { ...GET_HEADERS, ...(init?.headers || {}) },
     ...init,
   });
@@ -49,8 +40,8 @@ async function fetchAsJson(url: string, init?: RequestInit) {
 async function sendJson(url: string, method: 'POST' | 'PATCH' | 'DELETE', body?: any) {
   const res = await fetch(url, {
     method,
-    mode: 'cors',
-    credentials: 'omit',
+    // mode: 'cors',
+    // credentials: 'omit',
     headers: JSON_HEADERS,
     body: body == null ? undefined : typeof body === 'string' ? body : JSON.stringify(body),
   });
