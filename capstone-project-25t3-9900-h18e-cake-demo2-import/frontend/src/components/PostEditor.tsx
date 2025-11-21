@@ -14,6 +14,15 @@ const GET_HEADERS = {
   'x-requested-with': 'fetch',
 } as const;
 
+function absolutize(u: string) {
+  const apiBase = getApiBase();
+  if (!u) return "";
+  if (/^https?:\/\//i.test(u)) return u;
+  const b = apiBase.replace(/\/$/, "");
+  const p = u.startsWith("/") ? u : `/${u}`;
+  return `${b}${p}`;
+}
+
 const JSON_HEADERS = {
   ...GET_HEADERS,
   'Content-Type': 'application/json',
