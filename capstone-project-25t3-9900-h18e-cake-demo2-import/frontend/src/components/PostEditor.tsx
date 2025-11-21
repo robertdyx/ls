@@ -1,6 +1,7 @@
 // src/components/PostEditor.tsx
 import React, { useEffect, useMemo, useState } from 'react';
 import { getApiBase } from '../lib/fetcher';
+import HeroEditForm from './HeroEditForm'; // <— 新增：使用独立的 Hero 弹窗表单
 
 /* =========================================================
    通用：API 基址与请求工具（带 ngrok 绕过头）
@@ -86,66 +87,66 @@ interface Story {
    ========================================================= */
 
 // ---------- Hero ----------
-type HeroData = {
-  title?: string;
-  backgroundColor?: string;
-  textColor?: string;
-  kicker?: string;
-  authorLine?: string;
-};
+// type HeroData = {
+//   title?: string;
+//   backgroundColor?: string;
+//   textColor?: string;
+//   kicker?: string;
+//   authorLine?: string;
+// };
 
-function HeroEditForm({
-  value,
-  onChange,
-}: {
-  value: HeroData;
-  onChange: (v: HeroData) => void;
-}) {
-  return (
-    <div className="form-grid">
-      <label>
-        Title
-        <input
-          value={value.title || ''}
-          onChange={(e) => onChange({ ...value, title: e.target.value })}
-          placeholder="Hero title"
-        />
-      </label>
-      <label>
-        Kicker
-        <input
-          value={value.kicker || ''}
-          onChange={(e) => onChange({ ...value, kicker: e.target.value })}
-          placeholder="Byline / kicker"
-        />
-      </label>
-      <label>
-        Author Line
-        <input
-          value={value.authorLine || ''}
-          onChange={(e) => onChange({ ...value, authorLine: e.target.value })}
-          placeholder="Author(s)"
-        />
-      </label>
-      <label>
-        Background Color
-        <input
-          value={value.backgroundColor || ''}
-          onChange={(e) => onChange({ ...value, backgroundColor: e.target.value })}
-          placeholder="#0d3557"
-        />
-      </label>
-      <label>
-        Text Color
-        <input
-          value={value.textColor || ''}
-          onChange={(e) => onChange({ ...value, textColor: e.target.value })}
-          placeholder="#ffffff"
-        />
-      </label>
-    </div>
-  );
-}
+// function HeroEditForm({
+//   value,
+//   onChange,
+// }: {
+//   value: HeroData;
+//   onChange: (v: HeroData) => void;
+// }) {
+//   return (
+//     <div className="form-grid">
+//       <label>
+//         Title
+//         <input
+//           value={value.title || ''}
+//           onChange={(e) => onChange({ ...value, title: e.target.value })}
+//           placeholder="Hero title"
+//         />
+//       </label>
+//       <label>
+//         Kicker
+//         <input
+//           value={value.kicker || ''}
+//           onChange={(e) => onChange({ ...value, kicker: e.target.value })}
+//           placeholder="Byline / kicker"
+//         />
+//       </label>
+//       <label>
+//         Author Line
+//         <input
+//           value={value.authorLine || ''}
+//           onChange={(e) => onChange({ ...value, authorLine: e.target.value })}
+//           placeholder="Author(s)"
+//         />
+//       </label>
+//       <label>
+//         Background Color
+//         <input
+//           value={value.backgroundColor || ''}
+//           onChange={(e) => onChange({ ...value, backgroundColor: e.target.value })}
+//           placeholder="#0d3557"
+//         />
+//       </label>
+//       <label>
+//         Text Color
+//         <input
+//           value={value.textColor || ''}
+//           onChange={(e) => onChange({ ...value, textColor: e.target.value })}
+//           placeholder="#ffffff"
+//         />
+//       </label>
+//     </div>
+//   );
+// }
 
 // ---------- Paragraph ----------
 type ParagraphData = { content?: string };
@@ -436,9 +437,9 @@ function SectionTypeForm({
       </div>
 
       {/* 根据类型渲染子表单 */}
-      {type === 'hero' && (
+      /* {type === 'hero' && (
         <HeroEditForm value={dataObj as HeroData} onChange={setDataObj} />
-      )}
+      )} */
       {type === 'paragraph' && (
         <ParagraphEditForm value={dataObj as ParagraphData} onChange={setDataObj} />
       )}
@@ -581,7 +582,7 @@ function EditSectionForm({
 }
 
 /* =========================================================
-   主组件：PostEditor
+   主组件：PostEditor (为 hero 增加弹窗编辑流)
    ========================================================= */
 export default function PostEditor({
   embedded = false,
@@ -599,6 +600,7 @@ export default function PostEditor({
 
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState<Section | null>(null);
+  const [heroEditing, setHeroEditing] = useState<Section | null>(null); // Hero 弹窗
 
   // 拉取 story + sections
   const refresh = async (skipSpinner = false) => {
@@ -679,6 +681,20 @@ export default function PostEditor({
         />
       )}
 
+      {/* Hero 弹窗 */}
+      {heroEditing && (
+        <div className="modal-backdrop">
+          <div className="modal-card">
+            <HeroEditForm
+              section={heroEditing}
+              onSuccess={async () => { setHeroEditing(null); await refresh(true); onSectionsUpdated?.(); }}
+              onCancel={() => setHeroEditing(null)}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* 通用编辑（非 hero） */}
       {editing && (
         <EditSectionForm
           section={editing}
@@ -714,7 +730,8 @@ export default function PostEditor({
               </div>
               <div className="summary">{summary}</div>
               <div className="row">
-                <button onClick={() => setEditing(s)}>Edit</button>
+                {/* <button onClick={() => setEditing(s)}>Edit</button> */}
+                 <button onClick={() => s.type === 'hero' ? setHeroEditing(s) : setEditing(s)}>Edit</button>
                 <button className="danger" onClick={() => handleDelete(s.id)}>
                   Delete
                 </button>
