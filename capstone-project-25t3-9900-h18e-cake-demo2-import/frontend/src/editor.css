@@ -1,0 +1,237 @@
+/* 右侧编辑栏整体容器 */
+.editor-panel {
+  min-height: calc(100vh - 56px);
+  background: #ffffff;
+  border-left: 1px solid #e5e7eb;
+  overflow: auto;
+  padding: 16px;
+}
+
+/* 全局排版与间距 */
+.editor-panel * {
+  box-sizing: border-box;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji",
+    "Segoe UI Emoji", "Segoe UI Symbol";
+}
+
+.editor-panel h1,
+.editor-panel h2,
+.editor-panel h3 {
+  margin: 8px 0 12px;
+  line-height: 1.2;
+}
+
+.editor-panel h1 { font-size: 20px; font-weight: 800; }
+.editor-panel h2 { font-size: 16px; font-weight: 700; color: #374151; }
+
+/* 行为按钮（顶部加号、上下移动、删除等） */
+.editor-panel button {
+  appearance: none;
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  color: #111827;
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all .15s ease;
+}
+
+.editor-panel button:hover {
+  background: #f9fafb;
+  border-color: #d1d5db;
+}
+
+.editor-panel button:active {
+  transform: translateY(1px);
+}
+
+/* 主要操作按钮（如“Add …”/“保存”等） */
+.editor-panel .btn-primary,
+.editor-panel button[data-variant="primary"] {
+  background: #4f46e5;
+  color: #fff;
+  border-color: #4f46e5;
+}
+.editor-panel .btn-primary:hover,
+.editor-panel button[data-variant="primary"]:hover {
+  background: #4338ca;
+  border-color: #4338ca;
+}
+
+/* 输入控件统一风格 */
+.editor-panel input[type="text"],
+.editor-panel input[type="url"],
+.editor-panel input[type="number"],
+.editor-panel input[type="file"],
+.editor-panel textarea,
+.editor-panel select {
+  width: 100%;
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  color: #111827;
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin: 6px 0 12px;
+  outline: none;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+
+.editor-panel input[type="file"] {
+  padding: 8px 10px;
+}
+
+.editor-panel input:focus,
+.editor-panel textarea:focus,
+.editor-panel select:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99,102,241,.15);
+}
+
+/* 表单描述/标签 */
+.editor-panel label,
+.editor-panel .hint {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+/* 区块卡片（每个 section 的编辑区） */
+.editor-panel .card,
+.editor-panel .section-block {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  padding: 14px;
+  margin: 12px 0 16px;
+  box-shadow: 0 4px 18px rgba(0,0,0,.05);
+}
+
+/* 区块头部（编号 · 类型 · 排序）那一行 */
+.editor-panel .block-head,
+.editor-panel .section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-weight: 700;
+  color: #111827;
+}
+
+/* 类型标签（hero / image / paragraph 等） */
+.editor-panel .pill,
+.editor-panel .type-badge {
+  display: inline-block;
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #4338ca;
+  border: 1px solid #e0e7ff;
+}
+
+/* 区块内按钮条（↑ ↓ Delete 等） */
+.editor-panel .actions,
+.editor-panel .row-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+/* 两列布局（常见：左输入 右输入） */
+.editor-panel .grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+/* 三列布局 */
+.editor-panel .grid-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+}
+
+/* 添加分段的顶栏按钮行（+ Hero + Image …） */
+.editor-panel .add-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: linear-gradient(#ffffff, rgba(255,255,255,.98));
+  backdrop-filter: saturate(140%) blur(3px);
+  border-bottom: 1px solid #e5e7eb;
+  padding: 10px 0 12px;
+  margin-bottom: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* 分隔线 */
+.editor-panel .divider {
+  height: 1px;
+  background: #f3f4f6;
+  margin: 10px 0 14px;
+}
+
+/* 小提示块 */
+.editor-panel .note {
+  font-size: 12px;
+  color: #6b7280;
+  background: #f9fafb;
+  border: 1px dashed #e5e7eb;
+  border-radius: 10px;
+  padding: 8px 10px;
+  margin-top: 6px;
+}
+
+/* 文件选择行紧凑一些 */
+.editor-panel .file-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* 移动/删除按钮颜色区分 */
+.editor-panel .btn-danger,
+.editor-panel button[data-variant="danger"] {
+  border-color: #fca5a5;
+  background: #fee2e2;
+  color: #b91c1c;
+}
+.editor-panel .btn-danger:hover,
+.editor-panel button[data-variant="danger"]:hover {
+  background: #fecaca;
+  border-color: #f87171;
+}
+
+/* 小尺寸按钮（用于↑↓） */
+.editor-panel .btn-sm {
+  padding: 4px 8px;
+  font-size: 12px;
+  border-radius: 7px;
+}
+
+/* 让连续按钮之间有间隔 */
+.editor-panel button + button {
+  margin-left: 6px;
+}
+
+/* 让 “Use Teal / Save / Publish …” 一类顶栏看起来更像工具条 */
+.editor-panel .top-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+/* 表单行：标签在上，控件在下（通用增强） */
+.editor-panel .field {
+  margin-bottom: 10px;
+}
+.editor-panel .field > .label {
+  display: block;
+  font-size: 12px;
+  color: #6b7280;
+  margin-bottom: 6px;
+}
