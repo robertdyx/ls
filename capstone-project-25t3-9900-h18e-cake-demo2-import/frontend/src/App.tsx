@@ -1,19 +1,33 @@
 // src/App.tsx
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import './App.css';
+
 import PostEditor from './components/PostEditor';
 import { fetchStory } from './lib/fetcher';
 import {
+  getLatestStory,
+  listSections,
   createStory,
   createSection,
   type ID,
 } from './lib/db';
-import './App.css';
 
-type PreviewStory = {
-  id?: number;
-  title?: string;
-  standfirst?: string;
-  version?: string;
+/** ==================== 类型与工具 ==================== */
+type StoryRow = {
+  id: ID;
+  title?: string | null;
+  standfirst?: string | null;
+  version?: string | null;
+  theme_font?: string | null;
+  theme_primary_color?: string | null;
+};
+
+type SectionRow = {
+  id: ID;
+  story_id: ID;
+  type: string;
+  sort_order: number;
+  data: any;
 };
 
 type ImportedJson = {
@@ -24,160 +38,364 @@ type ImportedJson = {
   sections?: any[];
 };
 
+type Mode = 'view' | 'edit';
+type Device = 'desktop' | 'tablet' | 'iphone' | 'android';
+
+/** 设备外框尺寸（仅前端样式模拟） */
+const DEVICE_SIZE: Record<Device, { w: number; scale?: number }> = {
+  desktop: { w: 1200 },
+  tablet: { w: 820 },
+  iphone: { w: 390 },
+  android: { w: 412 },
+};
+
+/** ==================== 渲染组件（简易展示版） ==================== */
+const RenderHero: React.FC<{ data: any }> = ({ data }) => {
+  const title = data?.title ?? '';
+  const subtitle = data?.subtitle ?? '';
+  const bg = data?.backgroundVideo || data?.backgroundImage || '';
+  const poster = data?.poster || '';
+  const credit = data?.credit || '';
+  return (
+    <section style={{ padding: '40px 20px', borderBottom: '1px solid #eee' }}>
+      <h1 style={{ fontSize: 36, fontWeight: 700, margin: '0 0 8px' }}>{title}</h1>
+      {subtitle && <p style={{ color: '#555', margin: '0 0 12px' }}>{subtitle}</p>}
+      {(bg || poster) && (
+        <div style={{ marginTop: 8 }}>
+          <div style={{ fontSize: 12, color: '#888', marginBottom: 6 }}>Background</div>
+          <div style={{ fontSize: 13, wordBreak: 'break-all' }}>{bg || poster}</div>
+        </div>
+      )}
+      {credit && <div style={{ marginTop: 6, fontSize: 12, color: '#888' }}>Credit: {credit}</div>}
+    </section>
+  );
+};
+
+const RenderImage: React.FC<{ data: any }> = ({ data }) => {
+  const src = data?.src || data?.url || '';
+  const alt = data?.alt || '';
+  const caption = data?.caption || '';
+  const credit = data?.credit || '';
+  return (
+    <figure style={{ padding: 20, borderBottom: '1px solid #eee' }}>
+      {src ? (
+        // 直接展示 URL；如果是本地上传的对象，应该已经是 Storage 的 public URL
+        <img src={src} alt={alt} style={{ maxWidth: '100%', borderRadius: 8 }} />
+      ) : (
+        <div style={{ padding: 16, background: '#fafafa', border: '1px dashed #ddd' }}>
+          Image URL is empty
+        </div>
+      )}
+      {(caption || credit) && (
+        <figcaption style={{ color: '#666', marginTop: 8, fontSize: 14 }}>
+          {caption}
+          {credit ? <span style={{ color: '#999' }}> · {credit}</span> : null}
+        </figcaption>
+      )}
+    </figure>
+  );
+};
+
+const RenderParagraph: React.FC<{ data: any }> = ({ data }) => {
+  const text = data?.text || data?.content || '';
+  return (
+    <div style={{ padding: '16px 20px', lineHeight: 1.7, borderBottom: '1px solid #eee' }}>
+      {text}
+    </div>
+  );
+};
+
+const RenderPullQuote: React.FC<{ data: any }> = ({ data }) => {
+  const text = data?.text || '';
+  const cite = data?.cite || '';
+  return (
+    <blockquote
+      style={{
+        borderLeft: '4px solid #444',
+        margin: 0,
+        padding: '12px 16px',
+        background: '#fafafa',
+        borderBottom: '1px solid #eee',
+      }}
+    >
+      <div style={{ fontSize: 18, fontStyle: 'italic' }}>{text}</div>
+      {cite && <div style={{ marginTop: 6, fontSize: 12, color: '#666' }}>— {cite}</div>}
+    </blockquote>
+  );
+};
+
+const RenderVideo: React.FC<{ data: any }> = ({ data }) => {
+  // JSON 里可能用 type: 'video' 且 data.url / data.src
+  const src = data?.src || data?.url || '';
+  const poster = data?.poster || '';
+  const caption = data?.caption || '';
+  return (
+    <div style={{ padding: 20, borderBottom: '1px solid #eee' }}>
+      {src ? (
+        <video
+          controls
+          playsInline
+          poster={poster || undefined}
+          style={{ width: '100%', borderRadius: 8 }}
+          src={src}
+        />
+      ) : (
+        <div style={{ padding: 16, background: '#fafafa', border: '1px dashed #ddd' }}>
+          Video URL is empty
+        </div>
+      )}
+      {caption && <div style={{ marginTop: 8, color: '#666' }}>{caption}</div>}
+    </div>
+  );
+};
+
+const RenderUnknown: React.FC<{ data: any; type: string }> = ({ data, type }) => {
+  return (
+    <div style={{ padding: 16, borderBottom: '1px solid #eee' }}>
+      <div style={{ fontWeight: 600, marginBottom: 6 }}>Unsupported section: {type}</div>
+      <pre
+        style={{
+          fontSize: 12,
+          background: '#f6f8fa',
+          padding: 12,
+          borderRadius: 8,
+          overflowX: 'auto',
+        }}
+      >
+        {JSON.stringify(data, null, 2)}
+      </pre>
+    </div>
+  );
+};
+
+/** 按类型渲染一条分段 */
+const SectionRenderer: React.FC<{ row: SectionRow }> = ({ row }) => {
+  const t = (row.type || '').toLowerCase();
+  if (t === 'hero') return <RenderHero data={row.data} />;
+  if (t === 'image') return <RenderImage data={row.data} />;
+  if (t === 'paragraph') return <RenderParagraph data={row.data} />;
+  if (t === 'pullquote') return <RenderPullQuote data={row.data} />;
+  if (t === 'video') return <RenderVideo data={row.data} />;
+  if (t === 'imagegroup') {
+    // 简版：逐个渲染
+    const items: any[] = Array.isArray(row.data?.items) ? row.data.items : [];
+    return (
+      <div>
+        {items.map((it, i) => (
+          <RenderImage key={i} data={it} />
+        ))}
+      </div>
+    );
+  }
+  if (t === 'scrollytelling') {
+    // 简版：背景与步骤文本
+    const steps: any[] = Array.isArray(row.data?.steps) ? row.data.steps : [];
+    return (
+      <div style={{ borderBottom: '1px solid #eee', paddingBottom: 12 }}>
+        <RenderHero data={row.data} />
+        <div style={{ padding: '8px 20px' }}>
+          {steps.map((s, i) => (
+            <div key={i} style={{ margin: '8px 0', color: '#444' }}>
+              {s?.text || s?.title || JSON.stringify(s)}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+  return <RenderUnknown data={row.data} type={row.type} />;
+};
+
+/** 预览容器（套壳模拟设备宽度） */
+const DeviceFrame: React.FC<{ device: Device; children: React.ReactNode }> = ({
+  device,
+  children,
+}) => {
+  const spec = DEVICE_SIZE[device];
+  const w = spec.w;
+  const outer: React.CSSProperties = {
+    width: '100%',
+    display: 'flex',
+    justifyContent: 'center',
+    padding: '12px 0',
+    background: '#f3f4f6',
+    minHeight: 'calc(100vh - 56px)',
+  };
+  const inner: React.CSSProperties = {
+    width: w,
+    maxWidth: '100%',
+    background: '#fff',
+    boxShadow: '0 0 0 1px rgba(0,0,0,0.06), 0 10px 30px rgba(0,0,0,0.08)',
+    borderRadius: 10,
+    overflow: 'hidden',
+  };
+  return (
+    <div style={outer}>
+      <div style={inner}>{children}</div>
+    </div>
+  );
+};
+
+/** ==================== 主应用 ==================== */
 export default function App() {
+  const [mode, setMode] = useState<Mode>('view');
+  const [device, setDevice] = useState<Device>('desktop');
+
+  const [story, setStory] = useState<StoryRow | null>(null);
+  const [sections, setSections] = useState<SectionRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [showEditor, setShowEditor] = useState(false);
-  const [preview, setPreview] = useState<PreviewStory | null>(null);
-  const [importInfo, setImportInfo] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // 首页尽量拿一次预览；失败也不阻塞，直接可进入编辑器
+  /** 拉取“最新 story + sections”（导入后与编辑后都可复用） */
+  const refresh = async () => {
+    setLoading(true);
+    try {
+      const s = await getLatestStory();
+      if (!s) {
+        setStory(null);
+        setSections([]);
+      } else {
+        setStory(s as any);
+        const list = await listSections((s as any).id);
+        setSections((list as any[]).sort((a, b) => a.sort_order - b.sort_order));
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /** 首次加载：若能从 fetcher 获得 story 则显示欢迎页；无论如何再刷新一次 Supabase 最新内容 */
   useEffect(() => {
-    let mounted = true;
     (async () => {
       try {
-        setLoading(true);
-        const s = await fetchStory();
-        if (!mounted) return;
-        setPreview({
-          id: (s as any).id,
-          title: (s as any).title,
-          standfirst: (s as any).standfirst,
-          version: (s as any).version,
-        });
-        setError(null);
-      } catch (e: any) {
-        if (!mounted) return;
-        setError(e?.message ?? String(e));
-        // 仅提示，不强制立刻跳编辑器；用户可手动点“Start Editing”
+        await fetchStory().catch(() => null);
       } finally {
-        if (mounted) setLoading(false);
+        await refresh();
       }
     })();
-    return () => {
-      mounted = false;
-    };
   }, []);
 
-  // 点击导入按钮
-  const handleImportClick = () => fileInputRef.current?.click();
-
-  // 将 JSON 写入 Supabase：新建 story + 批量插入 sections
+  /** 导入 JSON → 写入 Supabase → 进入“预览”并刷新数据 */
   const importStoryToSupabase = async (json: ImportedJson) => {
-    const storyPayload = {
+    const payload = {
       title: json.title ?? 'Untitled story',
       version: json.version ? String(json.version) : 'v1',
       standfirst: json.standfirst ?? '',
       theme_font: json.theme?.font ?? 'Inter',
       theme_primary_color: json.theme?.primaryColor ?? '#0f766e',
     };
+    const s = await createStory(payload as any);
+    const storyId: ID = (s as any).id;
 
-    // 1) 新建 story
-    const story = await createStory(storyPayload as any);
-    const storyId: ID = (story as any).id;
-
-    // 2) 批量写 sections（保持数组顺序为 sort_order）
-    const sections = Array.isArray(json.sections) ? json.sections : [];
-    let inserted = 0;
-    for (let i = 0; i < sections.length; i++) {
-      const sec = sections[i];
-      const type = (sec && sec.type) ? String(sec.type) : 'paragraph';
-      // data 原样保存，保持导入后的编辑灵活性
+    const arr = Array.isArray(json.sections) ? json.sections : [];
+    for (let i = 0; i < arr.length; i++) {
+      const sec = arr[i];
       await createSection(storyId, {
-        type,
+        type: String(sec?.type ?? 'paragraph'),
         sort_order: i,
         data: sec ?? {},
       } as any);
-      inserted++;
     }
-
-    setImportInfo(
-      `Imported: story #${String(storyId)} with ${inserted} section(s).`
-    );
-
-    // 3) 进入编辑器
-    setShowEditor(true);
+    setMsg(`Imported story #${String(storyId)} with ${arr.length} section(s).`);
+    setMode('view');
+    await refresh();
   };
 
-  // 选择文件并导入
+  const handleImportBtn = () => fileInputRef.current?.click();
   const handleFilePicked = async (ev: React.ChangeEvent<HTMLInputElement>) => {
-    const file = ev.target.files?.[0];
-    if (!file) return;
+    const f = ev.target.files?.[0];
+    if (!f) return;
     try {
-      const text = await file.text();
+      const text = await f.text();
       const json = JSON.parse(text) as ImportedJson;
-      // 先给用户一个解析成功的提示
-      setImportInfo(
+      setMsg(
         `Loaded JSON: ${json?.title ?? 'Untitled'}${
           json?.version ? ' (' + json.version + ')' : ''
-        } — importing to Supabase…`
+        } — importing…`
       );
       await importStoryToSupabase(json);
     } catch (e: any) {
-      setImportInfo(`Failed to import JSON: ${e?.message ?? String(e)}`);
+      setMsg(`Failed to import: ${e?.message ?? String(e)}`);
     } finally {
-      // 允许再次选择同一个文件
       ev.target.value = '';
     }
   };
 
-  if (loading) {
-    return (
-      <main className="mx-auto max-w-5xl p-8 text-center">
-        <div className="text-lg">Loading…</div>
-      </main>
-    );
-  }
+  /** 顶部工具条 */
+  const TopBar = (
+    <div
+      style={{
+        height: 56,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        padding: '0 12px',
+        borderBottom: '1px solid #e5e7eb',
+        background: '#fff',
+        position: 'sticky',
+        top: 0,
+        zIndex: 30,
+      }}
+    >
+      <div style={{ fontWeight: 800, fontSize: 22, fontFamily: 'serif' }}>
+        {story ? `Story` : 'News Story Studio'}
+      </div>
 
-  if (showEditor) {
-    return (
-      <main className="mx-auto max-w-5xl p-4">
-        <PostEditor />
-      </main>
-    );
-  }
-
-  // 欢迎页 UI（保留）
-  return (
-    <main className="mx-auto max-w-4xl p-8">
-      {error && (
-        <div className="mb-4 rounded-md border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-800">
-          Note: preview failed ({error}). You can still edit directly — click “Start Editing”.
-        </div>
-      )}
-
-      <section className="text-center space-y-3 mb-8">
-        <h1 className="text-4xl font-serif font-bold">News Story Studio</h1>
-        <p className="text-gray-600">
-          Frontend connects to Supabase directly. You can import a JSON for preview or start editing now.
-        </p>
-      </section>
-
-      {preview && (
-        <div className="mb-6 rounded-xl border p-4">
-          <div className="text-sm text-gray-500 mb-1">
-            Latest Story{preview.id ? ` #${preview.id}` : ''}{' '}
-            {preview.version ? `· ${preview.version}` : ''}
-          </div>
-          <div className="font-semibold">{preview.title ?? 'Untitled'}</div>
-          {preview.standfirst && <div className="mt-1 text-gray-600">{preview.standfirst}</div>}
-        </div>
-      )}
-
-      <div className="flex gap-3 items-center">
+      <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
         <button
-          onClick={handleImportClick}
-          className="px-4 py-2 rounded bg-indigo-600 text-white hover:opacity-90"
+          onClick={handleImportBtn}
+          className="btn"
+          style={{ padding: '6px 10px', border: '1px solid #ddd', borderRadius: 8 }}
         >
-          Import Data
+          Import data
         </button>
+
         <button
-          onClick={() => setShowEditor(true)}
-          className="px-4 py-2 rounded bg-violet-700 text-white hover:opacity-90"
+          onClick={() => setMode((m) => (m === 'edit' ? 'view' : 'edit'))}
+          className="btn"
+          style={{
+            padding: '6px 10px',
+            border: '1px solid #ddd',
+            borderRadius: 8,
+            background: mode === 'edit' ? '#111827' : '#fff',
+            color: mode === 'edit' ? '#fff' : '#111',
+          }}
         >
-          Start Editing
+          {mode === 'edit' ? 'Exit Edit' : 'Edit'}
         </button>
+
+        <div
+          style={{
+            display: 'flex',
+            gap: 6,
+            padding: 2,
+            border: '1px solid #ddd',
+            borderRadius: 8,
+            background: '#f9fafb',
+          }}
+        >
+          {(['desktop', 'tablet', 'iphone', 'android'] as Device[]).map((d) => (
+            <button
+              key={d}
+              onClick={() => setDevice(d)}
+              style={{
+                padding: '6px 10px',
+                borderRadius: 6,
+                border: '1px solid #e5e7eb',
+                background: device === d ? '#4f46e5' : '#fff',
+                color: device === d ? '#fff' : '#111',
+              }}
+              title={`Preview: ${d}`}
+            >
+              {d === 'desktop' && 'Desktop'}
+              {d === 'tablet' && 'Tablet'}
+              {d === 'iphone' && 'iPhone'}
+              {d === 'android' && 'Android'}
+            </button>
+          ))}
+        </div>
 
         <input
           ref={fileInputRef}
@@ -187,8 +405,80 @@ export default function App() {
           onChange={handleFilePicked}
         />
       </div>
+    </div>
+  );
 
-      {importInfo && <div className="mt-4 text-sm text-gray-700">{importInfo}</div>}
+  /** 预览主体 */
+  const Preview = (
+    <DeviceFrame device={device}>
+      <article style={{ padding: 16 }}>
+        {story && (
+          <header style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 12, color: '#6b7280' }}>
+              Editing Story #{String(story.id)} {story.version ? `· ${story.version}` : ''}
+            </div>
+            <h1 style={{ fontSize: 28, fontWeight: 700, margin: '6px 0' }}>
+              {story.title || 'Untitled'}
+            </h1>
+            {story.standfirst && <p style={{ color: '#6b7280' }}>{story.standfirst}</p>}
+          </header>
+        )}
+        <section>
+          {sections.map((row) => (
+            <SectionRenderer key={row.id} row={row} />
+          ))}
+          {!sections.length && (
+            <div style={{ padding: 20, color: '#6b7280' }}>No sections yet.</div>
+          )}
+        </section>
+      </article>
+    </DeviceFrame>
+  );
+
+  /** 页面布局：view=单栏预览；edit=左预览右编辑 */
+  const Layout = useMemo(() => {
+    if (mode === 'edit') {
+      return (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr minmax(380px, 520px)' }}>
+          <div>{Preview}</div>
+          <div
+            style={{
+              minHeight: 'calc(100vh - 56px)',
+              borderLeft: '1px solid #e5e7eb',
+              background: '#fff',
+              overflow: 'auto',
+            }}
+          >
+            {/* 右侧编辑栏：沿用你的 PostEditor（直连 Supabase） */}
+            <PostEditor />
+          </div>
+        </div>
+      );
+    }
+    return Preview;
+  }, [mode, device, story, sections]);
+
+  /** 渲染 */
+  return (
+    <main style={{ background: '#f3f4f6', minHeight: '100vh' }}>
+      {TopBar}
+      {msg && (
+        <div
+          style={{
+            background: '#ecfeff',
+            color: '#155e75',
+            padding: '8px 12px',
+            borderBottom: '1px solid #bae6fd',
+          }}
+        >
+          {msg}
+        </div>
+      )}
+      {loading ? (
+        <div style={{ padding: 24 }}>Loading…</div>
+      ) : (
+        <div>{Layout}</div>
+      )}
     </main>
   );
 }
