@@ -205,22 +205,99 @@ const RenderParagraph: React.FC<{ data: any }> = ({ data }) => {
   );
 };
 
+// const RenderPullQuote: React.FC<{ data: any }> = ({ data }) => {
+//   const text = data?.text || '';
+//   const cite = data?.cite || '';
+//   return (
+//     <blockquote
+//       style={{
+//         borderLeft: '4px solid #444',
+//         margin: 0,
+//         padding: '12px 16px',
+//         background: '#fafafa',
+//         borderBottom: '1px solid #eee',
+//       }}
+//     >
+//       <div style={{ fontSize: 18, fontStyle: 'italic' }}>{text}</div>
+//       {cite && <div style={{ marginTop: 6, fontSize: 12, color: '#666' }}>— {cite}</div>}
+//     </blockquote>
+//   );
+// };
+
+/** ==================== Pull Quote（新版：大字号 + 四角装饰） ==================== */
 const RenderPullQuote: React.FC<{ data: any }> = ({ data }) => {
-  const text = data?.text || '';
-  const cite = data?.cite || '';
+  const text = (data?.text || '').toString();
+  const cite = (data?.cite || '').toString();
+  // 颜色优先从数据取，其次从主题色取，最后给一个好看的绿色
+  const color =
+    data?.color ||
+    data?.textColor ||
+    '#2f6f5e'; // 近似你截图中的绿色（也可换成 story.theme_primary_color 传入）
+
+  const box: React.CSSProperties = {
+    position: 'relative',
+    borderBottom: '1px solid #eee',
+    padding: '32px 20px 36px',
+    background: '#ffffff',
+  };
+
+  const inner: React.CSSProperties = {
+    maxWidth: 980,
+    margin: '0 auto',
+    textAlign: 'center',
+    color,
+    fontFamily: 'Georgia, "Times New Roman", Times, serif',
+  };
+
+  const quoteStyle: React.CSSProperties = {
+    fontWeight: 800,
+    // 大字号；在不同设备下也能接受的范围
+    fontSize: 'clamp(28px, 5vw, 48px)',
+    lineHeight: 1.25,
+    margin: 0,
+  };
+
+  const byline: React.CSSProperties = {
+    marginTop: 10,
+    fontSize: 14,
+    color: '#5f6f67',
+  };
+
+  // 四角装饰：两个角（左下 / 右上）
+  const cornerSize = 26;
+  const cornerWidth = 10;
+
+  const cornerBase: React.CSSProperties = {
+    position: 'absolute',
+    width: cornerSize,
+    height: cornerSize,
+  };
+
+  const cornerBL: React.CSSProperties = {
+    ...cornerBase,
+    left: 16,
+    bottom: 10,
+    borderLeft: `${cornerWidth}px solid ${color}`,
+    borderBottom: `${cornerWidth}px solid ${color}`,
+  };
+
+  const cornerTR: React.CSSProperties = {
+    ...cornerBase,
+    right: 16,
+    top: 10,
+    borderRight: `${cornerWidth}px solid ${color}`,
+    borderTop: `${cornerWidth}px solid ${color}`,
+  };
+
   return (
-    <blockquote
-      style={{
-        borderLeft: '4px solid #444',
-        margin: 0,
-        padding: '12px 16px',
-        background: '#fafafa',
-        borderBottom: '1px solid #eee',
-      }}
-    >
-      <div style={{ fontSize: 18, fontStyle: 'italic' }}>{text}</div>
-      {cite && <div style={{ marginTop: 6, fontSize: 12, color: '#666' }}>— {cite}</div>}
-    </blockquote>
+    <section style={box}>
+      <div style={inner}>
+        <p style={quoteStyle}>{text}</p>
+        {cite && <div style={byline}>— {cite}</div>}
+      </div>
+      <span style={cornerBL} aria-hidden />
+      <span style={cornerTR} aria-hidden />
+    </section>
   );
 };
 
