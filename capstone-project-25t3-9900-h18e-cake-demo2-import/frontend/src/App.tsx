@@ -50,7 +50,7 @@ const DEVICE_SIZE: Record<Device, { w: number; scale?: number }> = {
 };
 
 /** ==================== 渲染组件 ==================== */
-/** 替换后的 Hero：完全按扁平字段渲染 */
+/** Hero：按扁平字段渲染（支持题主 JSON 的 hero 字段） */
 const RenderHero: React.FC<{ data: any }> = ({ data }) => {
   const title: string = data?.title ?? '';
   const kicker: string = data?.kicker ?? '';
@@ -144,6 +144,7 @@ function splitHtmlParagraphs(input: string) {
   return core.map(s => s.replace(/<[^>]+>/g, '').trim()).filter(Boolean);
 }
 
+/** 单图（支持单图居中） */
 const RenderImage: React.FC<{ data: any; center?: boolean }> = ({ data, center }) => {
   const src = data?.src || data?.url || '';
   const alt = data?.alt || '';
@@ -186,6 +187,7 @@ const RenderImage: React.FC<{ data: any; center?: boolean }> = ({ data, center }
   );
 };
 
+/** 段落：自动去掉<p>标签并按段落显示 */
 const RenderParagraph: React.FC<{ data: any }> = ({ data }) => {
   const raw = data?.content ?? data?.text ?? '';
   const paras = raw.includes('<p') ? splitHtmlParagraphs(raw) : String(raw).split(/\n{2,}/);
@@ -205,34 +207,11 @@ const RenderParagraph: React.FC<{ data: any }> = ({ data }) => {
   );
 };
 
-// const RenderPullQuote: React.FC<{ data: any }> = ({ data }) => {
-//   const text = data?.text || '';
-//   const cite = data?.cite || '';
-//   return (
-//     <blockquote
-//       style={{
-//         borderLeft: '4px solid #444',
-//         margin: 0,
-//         padding: '12px 16px',
-//         background: '#fafafa',
-//         borderBottom: '1px solid #eee',
-//       }}
-//     >
-//       <div style={{ fontSize: 18, fontStyle: 'italic' }}>{text}</div>
-//       {cite && <div style={{ marginTop: 6, fontSize: 12, color: '#666' }}>— {cite}</div>}
-//     </blockquote>
-//   );
-// };
-
-/** ==================== Pull Quote（新版：大字号 + 四角装饰） ==================== */
+/** Pull Quote：大字号+四角装饰（贴近你的目标样式） */
 const RenderPullQuote: React.FC<{ data: any }> = ({ data }) => {
   const text = (data?.text || '').toString();
   const cite = (data?.cite || '').toString();
-  // 颜色优先从数据取，其次从主题色取，最后给一个好看的绿色
-  const color =
-    data?.color ||
-    data?.textColor ||
-    '#2f6f5e'; // 近似你截图中的绿色（也可换成 story.theme_primary_color 传入）
+  const color = data?.color || data?.textColor || '#2f6f5e';
 
   const box: React.CSSProperties = {
     position: 'relative',
@@ -251,7 +230,6 @@ const RenderPullQuote: React.FC<{ data: any }> = ({ data }) => {
 
   const quoteStyle: React.CSSProperties = {
     fontWeight: 800,
-    // 大字号；在不同设备下也能接受的范围
     fontSize: 'clamp(28px, 5vw, 48px)',
     lineHeight: 1.25,
     margin: 0,
@@ -263,30 +241,16 @@ const RenderPullQuote: React.FC<{ data: any }> = ({ data }) => {
     color: '#5f6f67',
   };
 
-  // 四角装饰：两个角（左下 / 右上）
   const cornerSize = 26;
   const cornerWidth = 10;
-
-  const cornerBase: React.CSSProperties = {
-    position: 'absolute',
-    width: cornerSize,
-    height: cornerSize,
-  };
-
+  const cornerBase: React.CSSProperties = { position: 'absolute', width: cornerSize, height: cornerSize };
   const cornerBL: React.CSSProperties = {
-    ...cornerBase,
-    left: 16,
-    bottom: 10,
-    borderLeft: `${cornerWidth}px solid ${color}`,
-    borderBottom: `${cornerWidth}px solid ${color}`,
+    ...cornerBase, left: 16, bottom: 10,
+    borderLeft: `${cornerWidth}px solid ${color}`, borderBottom: `${cornerWidth}px solid ${color}`,
   };
-
   const cornerTR: React.CSSProperties = {
-    ...cornerBase,
-    right: 16,
-    top: 10,
-    borderRight: `${cornerWidth}px solid ${color}`,
-    borderTop: `${cornerWidth}px solid ${color}`,
+    ...cornerBase, right: 16, top: 10,
+    borderRight: `${cornerWidth}px solid ${color}`, borderTop: `${cornerWidth}px solid ${color}`,
   };
 
   return (
@@ -301,9 +265,7 @@ const RenderPullQuote: React.FC<{ data: any }> = ({ data }) => {
   );
 };
 
-/* ========= 新增：视频源自动识别与播放（YouTube/Vimeo/HLS/直链） ========= */
-
-// URL 识别与转换
+/* ========= 视频源自动识别（YouTube/Vimeo/HLS/直链） ========= */
 function toYouTubeEmbed(url: string): string | null {
   if (!url) return null;
   const m = url.match(/(?:watch\?v=|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
@@ -323,8 +285,6 @@ function pickVideoType(url: string): string | undefined {
   if (/\.ogv?(\?|#|$)/i.test(url)) return 'video/ogg';
   return undefined;
 }
-
-// 按需加载 hls.js（仅当需要且浏览器不原生支持时）
 async function ensureHls() {
   const g = globalThis as any;
   if (g.Hls) return g.Hls as any;
@@ -338,8 +298,6 @@ async function ensureHls() {
   });
   return (globalThis as any).Hls as any;
 }
-
-// —— 新版：自动适配多种视频源 —— //
 const RenderVideo: React.FC<{ data: any }> = ({ data }) => {
   const raw = data?.src || data?.url || '';
   const poster = data?.poster || '';
@@ -353,21 +311,17 @@ const RenderVideo: React.FC<{ data: any }> = ({ data }) => {
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
-  // HLS 处理：Chrome/Edge 需要 hls.js，Safari 原生可播
   React.useEffect(() => {
     let hlsInstance: any;
     setError(null);
     if (!hls) return;
-
     const el = videoRef.current;
     if (!el) return;
 
-    // Safari 原生支持
     if (el.canPlayType('application/vnd.apple.mpegurl')) {
       el.src = raw;
       return;
     }
-    // 其它浏览器：动态加载 hls.js
     (async () => {
       try {
         const Hls = await ensureHls();
@@ -384,69 +338,39 @@ const RenderVideo: React.FC<{ data: any }> = ({ data }) => {
     })();
 
     return () => {
-      try {
-        hlsInstance?.destroy?.();
-      } catch {}
+      try { hlsInstance?.destroy?.(); } catch {}
     };
   }, [raw, hls]);
 
-  // 统一的容器（16:9 响应式）
   const frame: React.CSSProperties = {
-    position: 'relative',
-    width: '100%',
-    paddingTop: '56.25%',
-    background: '#000',
-    borderRadius: 8,
-    overflow: 'hidden',
+    position: 'relative', width: '100%', paddingTop: '56.25%', background: '#000',
+    borderRadius: 8, overflow: 'hidden',
   };
-  const abs: React.CSSProperties = {
-    position: 'absolute',
-    inset: 0,
-    width: '100%',
-    height: '100%',
-  };
+  const abs: React.CSSProperties = { position: 'absolute', inset: 0, width: '100%', height: '100%' };
 
-  // 1) YouTube / Vimeo：iframe 播放
   if (yt || vm) {
     const src = yt || vm!;
     return (
       <div style={{ padding: 20, borderBottom: '1px solid #eee' }}>
         <div style={frame}>
-          <iframe
-            src={src}
-            title="Embedded player"
-            style={abs}
-            frameBorder={0}
-            allow="autoplay; fullscreen; picture-in-picture"
-            allowFullScreen
-          />
+          <iframe src={src!} title="Embedded player" style={abs} frameBorder={0}
+                  allow="autoplay; fullscreen; picture-in-picture" allowFullScreen />
         </div>
         {caption && <div style={{ marginTop: 8, color: '#666' }}>{caption}</div>}
       </div>
     );
   }
-
-  // 2) HLS：<video> + hls.js（或 Safari 原生）
   if (hls) {
     return (
       <div style={{ padding: 20, borderBottom: '1px solid #eee' }}>
         <div style={frame}>
-          <video
-            ref={videoRef}
-            controls
-            playsInline
-            poster={poster || undefined}
-            style={abs}
-            // 不直接设置 src，由上面的 effect 按浏览器能力注入
-          />
+          <video ref={videoRef} controls playsInline poster={poster || undefined} style={abs} />
         </div>
         {caption && <div style={{ marginTop: 8, color: '#666' }}>{caption}</div>}
         {error && <div style={{ marginTop: 6, fontSize: 12, color: '#b91c1c' }}>{error}</div>}
       </div>
     );
   }
-
-  // 3) 直链文件：原生 <video>
   if (fileType) {
     return (
       <div style={{ padding: 20, borderBottom: '1px solid #eee' }}>
@@ -459,19 +383,9 @@ const RenderVideo: React.FC<{ data: any }> = ({ data }) => {
       </div>
     );
   }
-
-  // 4) 其它未知链接：提示
   return (
     <div style={{ padding: 20, borderBottom: '1px solid #eee' }}>
-      <div
-        style={{
-          padding: 16,
-          background: '#fafafa',
-          border: '1px dashed #ddd',
-          borderRadius: 8,
-          color: '#444',
-        }}
-      >
+      <div style={{ padding: 16, background: '#fafafa', border: '1px dashed #ddd', borderRadius: 8, color: '#444' }}>
         无法识别的视频链接格式：<span style={{ color: '#111' }}>{raw}</span>
         <div style={{ marginTop: 6, fontSize: 12, color: '#666' }}>
           支持：YouTube / Vimeo 页面地址、HLS(.m3u8)、直链 .mp4/.webm/.ogg。
@@ -482,26 +396,17 @@ const RenderVideo: React.FC<{ data: any }> = ({ data }) => {
   );
 };
 
-const RenderUnknown: React.FC<{ data: any; type: string }> = ({ data, type }) => {
-  return (
-    <div style={{ padding: 16, borderBottom: '1px solid #eee' }}>
-      <div style={{ fontWeight: 600, marginBottom: 6 }}>Unsupported section: {type}</div>
-      <pre
-        style={{
-          fontSize: 12,
-          background: '#f6f8fa',
-          padding: 12,
-          borderRadius: 8,
-          overflowX: 'auto',
-        }}
-      >
-        {JSON.stringify(data, null, 2)}
-      </pre>
-    </div>
-  );
-};
+/** 未知段落展示 */
+const RenderUnknown: React.FC<{ data: any; type: string }> = ({ data, type }) => (
+  <div style={{ padding: 16, borderBottom: '1px solid #eee' }}>
+    <div style={{ fontWeight: 600, marginBottom: 6 }}>Unsupported section: {type}</div>
+    <pre style={{ fontSize: 12, background: '#f6f8fa', padding: 12, borderRadius: 8, overflowX: 'auto' }}>
+      {JSON.stringify(data, null, 2)}
+    </pre>
+  </div>
+);
 
-/* ========= 新增：ImageGroup 组件（单图居中 & 多图并排 + layout） ========= */
+/* ========= ImageGroup（单图居中 & 多图并排 + layout 支持） ========= */
 const RenderImageGroup: React.FC<{ data: any }> = ({ data }) => {
   const list: any[] = Array.isArray(data?.images)
     ? data.images
@@ -509,27 +414,19 @@ const RenderImageGroup: React.FC<{ data: any }> = ({ data }) => {
     ? data.items
     : [];
 
-  // 单图：直接复用单图渲染并居中
   if (list.length <= 1) {
     const img = list[0] || data;
     return <RenderImage data={img} center />;
   }
 
-  // 多图：按 layout 并排（third/half/default/superfull）
   const wrapStyle: React.CSSProperties = {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: 12,
-    padding: 12,
-    borderBottom: '1px solid #eee',
-    justifyContent: 'center',
+    display: 'flex', flexWrap: 'wrap', gap: 12, padding: 12, borderBottom: '1px solid #eee', justifyContent: 'center',
   };
 
   const basis = (layout?: string) => {
     const t = String(layout || 'default').toLowerCase();
     if (t === 'third') return 'calc(33.333% - 8px)';
     if (t === 'half') return 'calc(50% - 8px)';
-    if (t === 'default') return '100%';
     return '100%';
   };
 
@@ -542,23 +439,11 @@ const RenderImageGroup: React.FC<{ data: any }> = ({ data }) => {
           if (layout === 'superfull') {
             return (
               <figure key={idx} style={{ width: '100%', margin: 0, padding: '12px 0' }}>
-                <div
-                  style={{
-                    width: '100vw',
-                    marginLeft: 'calc(50% - 50vw)',
-                    background: '#00000008',
-                  }}
-                >
-                  <img
-                    src={img?.src}
-                    alt={img?.alt || ''}
-                    style={{ display: 'block', width: '100%', height: 'auto' }}
-                  />
+                <div style={{ width: '100vw', marginLeft: 'calc(50% - 50vw)', background: '#00000008' }}>
+                  <img src={img?.src} alt={img?.alt || ''} style={{ display: 'block', width: '100%', height: 'auto' }} />
                 </div>
                 {(img?.caption || img?.credit) && (
-                  <figcaption
-                    style={{ color: '#666', marginTop: 8, fontSize: 14, textAlign: 'center' }}
-                  >
+                  <figcaption style={{ color: '#666', marginTop: 8, fontSize: 14, textAlign: 'center' }}>
                     {img?.caption}
                     {img?.credit ? <span style={{ color: '#999' }}> · {img.credit}</span> : null}
                   </figcaption>
@@ -595,6 +480,125 @@ const RenderImageGroup: React.FC<{ data: any }> = ({ data }) => {
   );
 };
 
+/* ========= Scrollytelling（根据题主 JSON 结构：height + textBlocks + backgroundImages） ========= */
+const RenderScrolly: React.FC<{ data: any }> = ({ data }) => {
+  const height = (data?.height as string) || '400vh';
+  const textBlocks: Array<{ content?: string; triggerProgress?: number }> =
+    Array.isArray(data?.textBlocks) ? data.textBlocks : [];
+  const bgImages: string[] = Array.isArray(data?.backgroundImages) ? data.backgroundImages : [];
+
+  // 计算每个 step 的进入边界，随滚动切换当前背景
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [active, setActive] = useState(0);
+
+  useEffect(() => {
+    const root = containerRef.current;
+    if (!root) return;
+
+    const steps = Array.from(root.querySelectorAll<HTMLElement>('[data-step]'));
+    const obs = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((e) => {
+          if (e.isIntersecting) {
+            const idx = Number(e.target.getAttribute('data-step') || 0);
+            setActive(idx);
+          }
+        });
+      },
+      { root: null, threshold: 0.6 }
+    );
+
+    steps.forEach((el) => obs.observe(el));
+    return () => obs.disconnect();
+  }, [textBlocks.length]);
+
+  // 清洗文本
+  const clean = (html?: string) =>
+    (html || '')
+      .replace(/^<p>/i, '')
+      .replace(/<\/p>$/i, '')
+      .split(/<\/p>\s*<p>/i)
+      .map(s => s.replace(/<[^>]+>/g, '').trim())
+      .filter(Boolean);
+
+  // UI
+  return (
+    <section style={{ position: 'relative', borderBottom: '1px solid #eee' }}>
+      {/* 背景层：sticky 占位全屏，高度由 height 控制滚动距离 */}
+      <div style={{ position: 'relative', height }}>
+        <div
+          style={{
+            position: 'sticky',
+            top: 0,
+            height: '100vh',
+            overflow: 'hidden',
+            background: '#000',
+          }}
+        >
+          {bgImages.map((src, i) => (
+            <img
+              key={i}
+              src={src}
+              alt=""
+              style={{
+                position: 'absolute',
+                inset: 0,
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                opacity: active === i ? 1 : 0,
+                transition: 'opacity .5s ease',
+              }}
+            />
+          ))}
+        </div>
+
+        {/* 文本层：滚动内容 */}
+        <div
+          ref={containerRef}
+          style={{
+            position: 'relative',
+            margin: '0 auto',
+            maxWidth: 980,
+            pointerEvents: 'none', // 仅显示，不挡背景
+          }}
+        >
+          {textBlocks.map((b, i) => (
+            <div
+              key={i}
+              data-step={i}
+              style={{
+                minHeight: '60vh',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '24px 16px',
+              }}
+            >
+              <div
+                style={{
+                  background: 'rgba(255,255,255,.9)',
+                  backdropFilter: 'saturate(120%) blur(2px)',
+                  borderRadius: 12,
+                  padding: 20,
+                  boxShadow: '0 8px 30px rgba(0,0,0,.12)',
+                  pointerEvents: 'auto',
+                }}
+              >
+                {clean(b?.content).map((t, j) => (
+                  <p key={j} style={{ margin: '0 0 12px', lineHeight: 1.7, fontSize: 18 }}>
+                    {t}
+                  </p>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+};
+
 /** 按类型渲染一条分段 */
 const SectionRenderer: React.FC<{ row: SectionRow; centerSingleImage?: boolean }> = ({
   row,
@@ -607,21 +611,7 @@ const SectionRenderer: React.FC<{ row: SectionRow; centerSingleImage?: boolean }
   if (t === 'pullquote') return <RenderPullQuote data={row.data} />;
   if (t === 'video') return <RenderVideo data={row.data} />;
   if (t === 'imagegroup') return <RenderImageGroup data={row.data} />;
-  if (t === 'scrollytelling') {
-    const steps: any[] = Array.isArray(row.data?.steps) ? row.data.steps : [];
-    return (
-      <div style={{ borderBottom: '1px solid #eee', paddingBottom: 12 }}>
-        <RenderHero data={row.data} />
-        <div style={{ padding: '8px 20px' }}>
-          {steps.map((s, i) => (
-            <div key={i} style={{ margin: '8px 0', color: '#444' }}>
-              {s?.text || s?.title || JSON.stringify(s)}
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
+  if (t === 'scrollytelling') return <RenderScrolly data={row.data} />;
   return <RenderUnknown data={row.data} type={row.type} />;
 };
 
