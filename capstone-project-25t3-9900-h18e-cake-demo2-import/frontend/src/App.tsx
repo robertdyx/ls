@@ -224,25 +224,182 @@ const RenderPullQuote: React.FC<{ data: any }> = ({ data }) => {
   );
 };
 
+/* ========= 新增：视频源自动识别与播放（YouTube/Vimeo/HLS/直链） ========= */
+
+// URL 识别与转换
+function toYouTubeEmbed(url: string): string | null {
+  if (!url) return null;
+  const m = url.match(/(?:watch\?v=|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
+  return m ? `https://www.youtube.com/embed/${m[1]}?rel=0` : null;
+}
+function toVimeoEmbed(url: string): string | null {
+  if (!url) return null;
+  const m = url.match(/vimeo\.com\/(\d+)/);
+  return m ? `https://player.vimeo.com/video/${m[1]}` : null;
+}
+function isHls(url: string): boolean {
+  return /\.m3u8(\?|#|$)/i.test(url);
+}
+function pickVideoType(url: string): string | undefined {
+  if (/\.mp4(\?|#|$)/i.test(url)) return 'video/mp4';
+  if (/\.webm(\?|#|$)/i.test(url)) return 'video/webm';
+  if (/\.ogv?(\?|#|$)/i.test(url)) return 'video/ogg';
+  return undefined;
+}
+
+// 按需加载 hls.js（仅当需要且浏览器不原生支持时）
+async function ensureHls() {
+  const g = globalThis as any;
+  if (g.Hls) return g.Hls as any;
+  await new Promise<void>((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/hls.js@1.5.7/dist/hls.min.js';
+    s.async = true;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error('Failed to load hls.js'));
+    document.head.appendChild(s);
+  });
+  return (globalThis as any).Hls as any;
+}
+
+// —— 新版：自动适配多种视频源 —— //
 const RenderVideo: React.FC<{ data: any }> = ({ data }) => {
-  const src = data?.src || data?.url || '';
+  const raw = data?.src || data?.url || '';
   const poster = data?.poster || '';
   const caption = data?.caption || '';
+
+  const yt = toYouTubeEmbed(raw);
+  const vm = toVimeoEmbed(raw);
+  const hls = isHls(raw);
+  const fileType = pickVideoType(raw);
+
+  const videoRef = React.useRef<HTMLVideoElement | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+
+  // HLS 处理：Chrome/Edge 需要 hls.js，Safari 原生可播
+  React.useEffect(() => {
+    let hlsInstance: any;
+    setError(null);
+    if (!hls) return;
+
+    const el = videoRef.current;
+    if (!el) return;
+
+    // Safari 原生支持
+    if (el.canPlayType('application/vnd.apple.mpegurl')) {
+      el.src = raw;
+      return;
+    }
+    // 其它浏览器：动态加载 hls.js
+    (async () => {
+      try {
+        const Hls = await ensureHls();
+        if (!Hls?.isSupported?.()) {
+          setError('HLS 不受当前浏览器支持');
+          return;
+        }
+        hlsInstance = new Hls();
+        hlsInstance.loadSource(raw);
+        hlsInstance.attachMedia(el);
+      } catch (e: any) {
+        setError(`加载 HLS 播放器失败：${e?.message || e}`);
+      }
+    })();
+
+    return () => {
+      try {
+        hlsInstance?.destroy?.();
+      } catch {}
+    };
+  }, [raw, hls]);
+
+  // 统一的容器（16:9 响应式）
+  const frame: React.CSSProperties = {
+    position: 'relative',
+    width: '100%',
+    paddingTop: '56.25%',
+    background: '#000',
+    borderRadius: 8,
+    overflow: 'hidden',
+  };
+  const abs: React.CSSProperties = {
+    position: 'absolute',
+    inset: 0,
+    width: '100%',
+    height: '100%',
+  };
+
+  // 1) YouTube / Vimeo：iframe 播放
+  if (yt || vm) {
+    const src = yt || vm!;
+    return (
+      <div style={{ padding: 20, borderBottom: '1px solid #eee' }}>
+        <div style={frame}>
+          <iframe
+            src={src}
+            title="Embedded player"
+            style={abs}
+            frameBorder={0}
+            allow="autoplay; fullscreen; picture-in-picture"
+            allowFullScreen
+          />
+        </div>
+        {caption && <div style={{ marginTop: 8, color: '#666' }}>{caption}</div>}
+      </div>
+    );
+  }
+
+  // 2) HLS：<video> + hls.js（或 Safari 原生）
+  if (hls) {
+    return (
+      <div style={{ padding: 20, borderBottom: '1px solid #eee' }}>
+        <div style={frame}>
+          <video
+            ref={videoRef}
+            controls
+            playsInline
+            poster={poster || undefined}
+            style={abs}
+            // 不直接设置 src，由上面的 effect 按浏览器能力注入
+          />
+        </div>
+        {caption && <div style={{ marginTop: 8, color: '#666' }}>{caption}</div>}
+        {error && <div style={{ marginTop: 6, fontSize: 12, color: '#b91c1c' }}>{error}</div>}
+      </div>
+    );
+  }
+
+  // 3) 直链文件：原生 <video>
+  if (fileType) {
+    return (
+      <div style={{ padding: 20, borderBottom: '1px solid #eee' }}>
+        <div style={frame}>
+          <video controls playsInline poster={poster || undefined} style={abs}>
+            <source src={raw} type={fileType} />
+          </video>
+        </div>
+        {caption && <div style={{ marginTop: 8, color: '#666' }}>{caption}</div>}
+      </div>
+    );
+  }
+
+  // 4) 其它未知链接：提示
   return (
     <div style={{ padding: 20, borderBottom: '1px solid #eee' }}>
-      {src ? (
-        <video
-          controls
-          playsInline
-          poster={poster || undefined}
-          style={{ width: '100%', borderRadius: 8 }}
-          src={src}
-        />
-      ) : (
-        <div style={{ padding: 16, background: '#fafafa', border: '1px dashed #ddd' }}>
-          Video URL is empty
+      <div
+        style={{
+          padding: 16,
+          background: '#fafafa',
+          border: '1px dashed #ddd',
+          borderRadius: 8,
+          color: '#444',
+        }}
+      >
+        无法识别的视频链接格式：<span style={{ color: '#111' }}>{raw}</span>
+        <div style={{ marginTop: 6, fontSize: 12, color: '#666' }}>
+          支持：YouTube / Vimeo 页面地址、HLS(.m3u8)、直链 .mp4/.webm/.ogg。
         </div>
-      )}
+      </div>
       {caption && <div style={{ marginTop: 8, color: '#666' }}>{caption}</div>}
     </div>
   );
@@ -476,7 +633,7 @@ export default function App() {
             display: 'flex',
             gap: 6,
             padding: 2,
-            border: '1px solid #ddd',
+            border: '1px solid '#ddd',
             borderRadius: 8,
             background: '#f9fafb',
           }}
