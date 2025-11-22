@@ -1,0 +1,217 @@
+/* ============================================ */
+/* src/components/Scrollytelling.css - 修正版 */
+/* ============================================ */
+
+/* ============================================ */
+/* 容器 - 限制作用范围 */
+/* ============================================ */
+.scrollytelling-container {
+  position: relative;
+  width: var(--full-bleed-width, 100vw);
+  margin-left: var(--full-bleed-offset, calc(50% - 50vw));
+  margin-right: var(--full-bleed-offset, calc(50% - 50vw));
+  padding: 0;
+  isolation: isolate;
+  margin-top: var(--block-spacing-vertical);
+}
+
+/* ============================================ */
+/* 全屏背景层（sticky） */
+/* ============================================ */
+.scrollytelling-background {
+  position: sticky;
+  top: 0;
+  left: 0;
+  width: var(--full-bleed-width, 100vw);
+  height: 100vh;
+  margin-left: 0;
+  margin-right: 0;
+  overflow: hidden;
+  z-index: 1;
+
+  /* ✅ 新增：让背景图片始终居中对齐 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ============================================ */
+/* ✅ 响应式背景图修正版 - 随窗口自适应比例 */
+/* ============================================ */
+.background-image {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: auto;
+  min-height: 100%;
+  aspect-ratio: 16 / 9; /* 可根据素材改比例，如 4/3 或 21/9 */
+  object-fit: cover;
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+
+.background-image.active {
+  opacity: 1;
+  z-index: 1;
+}
+
+/* ✅ 防止滚动时上下留黑边（竖屏设备下填满高度） */
+@media (max-aspect-ratio: 16/9) {
+  .background-image {
+    width: auto;
+    height: 100%;
+  }
+}
+
+/* ✅ 小屏优化：防止图片被裁掉太多 */
+@media (max-width: 768px) {
+  .background-image {
+    aspect-ratio: auto;
+    width: 100%;
+    height: 100%;
+    background-size: contain;
+  }
+}
+
+/* ============================================ */
+/* 滚动的文字层 - 优化间距 */
+/* ============================================ */
+.scrollytelling-content {
+  position: relative;
+  z-index: 2;
+  padding: 40vh 0 60vh 0;
+  pointer-events: none;
+}
+
+.text-block {
+  max-width: 700px;
+  margin: 0 auto 60vh auto;
+  padding: 2rem;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  backdrop-filter: blur(10px);
+  pointer-events: auto;
+}
+
+/* 最后一个文字块：间距更大，确保留白 */
+.text-block:last-child {
+  margin-bottom: 100vh;
+}
+
+.text-block p {
+  font-size: 19px;
+  line-height: 1.7;
+  color: #111111;
+  margin: 0 0 1rem 0;
+}
+
+.text-block p:last-child {
+  margin-bottom: 0;
+}
+
+/* ============================================ */
+/* 加载状态 */
+/* ============================================ */
+.loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: #000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  z-index: 10;
+}
+
+.loading-overlay .spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid rgba(255, 255, 255, 0.2);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 1rem;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-overlay p {
+  font-size: 14px;
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* ============================================ */
+/* 响应式 */
+/* ============================================ */
+@media (max-width: 768px) {
+  .scrollytelling-content {
+    padding: 30vh 0 50vh 0;
+  }
+
+  .text-block {
+    max-width: calc(100% - 2rem);
+    margin: 0 1rem 50vh 1rem;
+    padding: 1.5rem;
+  }
+
+  .text-block:last-child {
+    margin-bottom: 80vh;
+  }
+
+  .text-block p {
+    font-size: 17px;
+  }
+}
+
+@media (max-width: 480px) {
+  .scrollytelling-content {
+    padding: 25vh 0 40vh 0;
+  }
+
+  .text-block {
+    padding: 1.25rem;
+    margin-bottom: 40vh;
+  }
+
+  .text-block:last-child {
+    margin-bottom: 60vh;
+  }
+
+  .text-block p {
+    font-size: 16px;
+    line-height: 1.6;
+  }
+}
+
+/* ============================================ */
+/* 防止层叠冲突 - 增强隔离 */
+/* ============================================ */
+.scrollytelling-container + * {
+  position: relative;
+  z-index: 10;
+  background: white;
+  padding-top: var(--block-spacing-vertical);
+}
+
+.scrollytelling-container + .image-group-grid,
+.scrollytelling-container + .image-container,
+.scrollytelling-container + .paragraph-section {
+  margin-top: var(--block-spacing-vertical);
+  background: white;
+  position: relative;
+  z-index: 10;
+}

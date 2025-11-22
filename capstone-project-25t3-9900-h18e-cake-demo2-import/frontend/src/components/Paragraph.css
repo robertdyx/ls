@@ -1,0 +1,33 @@
+/* src/components/Paragraph.css */
+/* FINAL VERIFIED VERSION — aligned with NW_Brand_Concepts_RD4C.pdf */
+
+.paragraph-section {
+  margin: var(--block-spacing-vertical) auto;
+  max-width: var(--content-max-width);
+}
+
+.paragraph-section p {
+  font-family: var(--font-sans);
+  font-size: var(--font-size-body);
+  line-height: 1.7;
+  color: var(--color-text);
+  margin-bottom: 1.5rem;
+}
+
+.paragraph-section p:first-child::first-letter {
+  all: unset;
+}
+
+.paragraph-section p:last-child {
+  margin-bottom: 0;
+}
+
+@media (max-width: 768px) {
+  .paragraph-section {
+    margin: calc(var(--block-spacing-vertical) * 0.75) auto;
+  }
+
+  .paragraph-section p {
+    line-height: 1.6;
+  }
+}
