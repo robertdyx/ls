@@ -1,6 +1,7 @@
 // src/App.tsx
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
+import './editor.css';
 
 import PostEditor from './components/PostEditor';
 import { fetchStory } from './lib/fetcher';
@@ -207,7 +208,7 @@ const RenderParagraph: React.FC<{ data: any }> = ({ data }) => {
   );
 };
 
-/** Pull Quote：大字号+四角装饰 */
+/** Pull Quote：大字号+四角装饰（你期望的视觉效果） */
 const RenderPullQuote: React.FC<{ data: any }> = ({ data }) => {
   const text = (data?.text || '').toString();
   const cite = (data?.cite || '').toString();
@@ -848,20 +849,13 @@ export default function App() {
     </DeviceFrame>
   );
 
-  /** 页面布局：view=单栏预览；edit=左预览右编辑 */
+  /** 页面布局：view=单栏预览；edit=左预览右编辑（右侧使用 editor.css） */
   const Layout = useMemo(() => {
     if (mode === 'edit') {
       return (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr minmax(380px, 520px)' }}>
           <div>{Preview}</div>
-          <div
-            style={{
-              minHeight: 'calc(100vh - 56px)',
-              borderLeft: '1px solid #e5e7eb',
-              background: '#fff',
-              overflow: 'auto',
-            }}
-          >
+          <div className="editor-panel">
             <PostEditor />
           </div>
         </div>
