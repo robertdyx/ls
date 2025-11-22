@@ -71,23 +71,51 @@ const RenderHero: React.FC<{ data: any }> = ({ data }) => {
   );
 };
 
-const RenderImage: React.FC<{ data: any }> = ({ data }) => {
+/** —— 新增：仅用于段落 HTML 清洗与分段 —— */
+function splitHtmlParagraphs(input: string) {
+  if (!input) return [];
+  const html = input.trim();
+  const core = html
+    .replace(/^<p>/i, '')
+    .replace(/<\/p>$/i, '')
+    .split(/<\/p>\s*<p>/i);
+  return core.map(s => s.replace(/<[^>]+>/g, '').trim()).filter(Boolean);
+}
+
+const RenderImage: React.FC<{ data: any; center?: boolean }> = ({ data, center }) => {
   const src = data?.src || data?.url || '';
   const alt = data?.alt || '';
   const caption = data?.caption || '';
   const credit = data?.credit || '';
+
+  const imgStyle: React.CSSProperties = center
+    ? { display: 'block', maxWidth: 900, width: '100%', margin: '0 auto', borderRadius: 8 }
+    : { display: 'block', maxWidth: '100%', width: '100%', borderRadius: 8 };
+
+  const figureStyle: React.CSSProperties = {
+    padding: 20,
+    borderBottom: '1px solid #eee',
+    ...(center ? { maxWidth: 980, margin: '0 auto' } : null),
+  };
+
   return (
-    <figure style={{ padding: 20, borderBottom: '1px solid #eee' }}>
+    <figure style={figureStyle}>
       {src ? (
-        // 直接展示 URL；如果是本地上传的对象，应该已经是 Storage 的 public URL
-        <img src={src} alt={alt} style={{ maxWidth: '100%', borderRadius: 8 }} />
+        <img src={src} alt={alt} style={imgStyle} />
       ) : (
         <div style={{ padding: 16, background: '#fafafa', border: '1px dashed #ddd' }}>
           Image URL is empty
         </div>
       )}
       {(caption || credit) && (
-        <figcaption style={{ color: '#666', marginTop: 8, fontSize: 14 }}>
+        <figcaption
+          style={{
+            color: '#666',
+            marginTop: 8,
+            fontSize: 14,
+            textAlign: center ? 'center' : 'left',
+          }}
+        >
           {caption}
           {credit ? <span style={{ color: '#999' }}> · {credit}</span> : null}
         </figcaption>
@@ -97,10 +125,20 @@ const RenderImage: React.FC<{ data: any }> = ({ data }) => {
 };
 
 const RenderParagraph: React.FC<{ data: any }> = ({ data }) => {
-  const text = data?.text || data?.content || '';
+  const raw = data?.content ?? data?.text ?? '';
+  const paras = raw.includes('<p') ? splitHtmlParagraphs(raw) : String(raw).split(/\n{2,}/);
+
   return (
-    <div style={{ padding: '16px 20px', lineHeight: 1.7, borderBottom: '1px solid #eee' }}>
-      {text}
+    <div style={{ padding: '16px 20px', lineHeight: 1.8, borderBottom: '1px solid #eee' }}>
+      {paras.length === 0 ? (
+        <p style={{ color: '#6b7280' }}></p>
+      ) : (
+        paras.map((t, i) => (
+          <p key={i} style={{ margin: '0 0 1em' }}>
+            {t}
+          </p>
+        ))
+      )}
     </div>
   );
 };
@@ -125,7 +163,6 @@ const RenderPullQuote: React.FC<{ data: any }> = ({ data }) => {
 };
 
 const RenderVideo: React.FC<{ data: any }> = ({ data }) => {
-  // JSON 里可能用 type: 'video' 且 data.url / data.src
   const src = data?.src || data?.url || '';
   const poster = data?.poster || '';
   const caption = data?.caption || '';
@@ -169,15 +206,17 @@ const RenderUnknown: React.FC<{ data: any; type: string }> = ({ data, type }) =>
 };
 
 /** 按类型渲染一条分段 */
-const SectionRenderer: React.FC<{ row: SectionRow }> = ({ row }) => {
+const SectionRenderer: React.FC<{ row: SectionRow; centerSingleImage?: boolean }> = ({
+  row,
+  centerSingleImage,
+}) => {
   const t = (row.type || '').toLowerCase();
   if (t === 'hero') return <RenderHero data={row.data} />;
-  if (t === 'image') return <RenderImage data={row.data} />;
+  if (t === 'image') return <RenderImage data={row.data} center={!!centerSingleImage} />;
   if (t === 'paragraph') return <RenderParagraph data={row.data} />;
   if (t === 'pullquote') return <RenderPullQuote data={row.data} />;
   if (t === 'video') return <RenderVideo data={row.data} />;
   if (t === 'imagegroup') {
-    // 简版：逐个渲染
     const items: any[] = Array.isArray(row.data?.items) ? row.data.items : [];
     return (
       <div>
@@ -188,7 +227,6 @@ const SectionRenderer: React.FC<{ row: SectionRow }> = ({ row }) => {
     );
   }
   if (t === 'scrollytelling') {
-    // 简版：背景与步骤文本
     const steps: any[] = Array.isArray(row.data?.steps) ? row.data.steps : [];
     return (
       <div style={{ borderBottom: '1px solid #eee', paddingBottom: 12 }}>
@@ -247,6 +285,12 @@ export default function App() {
   const [msg, setMsg] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  /** —— 新增：统计整篇中 image 的数量，用于单图居中 —— */
+  const imageCount = useMemo(
+    () => sections.filter(s => (s.type || '').toLowerCase() === 'image').length,
+    [sections]
+  );
 
   /** 拉取“最新 story + sections”（导入后与编辑后都可复用） */
   const refresh = async () => {
@@ -425,7 +469,11 @@ export default function App() {
         )}
         <section>
           {sections.map((row) => (
-            <SectionRenderer key={row.id} row={row} />
+            <SectionRenderer
+              key={row.id}
+              row={row}
+              centerSingleImage={imageCount === 1}
+            />
           ))}
           {!sections.length && (
             <div style={{ padding: 20, color: '#6b7280' }}>No sections yet.</div>
@@ -456,7 +504,7 @@ export default function App() {
       );
     }
     return Preview;
-  }, [mode, device, story, sections]);
+  }, [mode, device, story, sections, imageCount]);
 
   /** 渲染 */
   return (
