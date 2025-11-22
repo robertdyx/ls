@@ -12,12 +12,12 @@ import {
 import { uploadFile } from '../lib/upload';
 
 // 这些子编辑表单与原项目同名组件；如果你路径不同请调整 import
-import HeroEditForm from './forms/HeroEditForm';
-import ImageEditForm from './forms/ImageEditForm';
-import ScrollytellingEditForm from './forms/ScrollytellingEditForm';
-import ImageGroupEditForm from './forms/ImageGroupEditForm';
-import ParagraphEditForm from './forms/ParagraphEditForm';
-import PullQuoteEditForm from './forms/PullQuoteEditForm';
+import HeroEditForm from './HeroEditForm';
+import ImageEditForm from './ImageEditForm';
+import ScrollytellingEditForm from './ScrollytellingEditForm';
+import ImageGroupEditForm from './ImageGroupEditForm';
+import ParagraphEditForm from './ParagraphEditForm';
+import PullQuoteEditForm from './PullQuoteEditForm';
 
 type SectionRow = {
   id: ID;
