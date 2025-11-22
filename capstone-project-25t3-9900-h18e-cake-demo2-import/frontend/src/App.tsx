@@ -633,7 +633,7 @@ export default function App() {
             display: 'flex',
             gap: 6,
             padding: 2,
-            border: '1px solid '#ddd',
+            border: '1px solid #ddd',
             borderRadius: 8,
             background: '#f9fafb',
           }}
