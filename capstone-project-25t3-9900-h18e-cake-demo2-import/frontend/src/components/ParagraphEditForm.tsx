@@ -106,6 +106,171 @@
 // }
 
 
+// import React, { useEffect, useMemo, useState } from 'react';
+
+// export type ParagraphData = {
+//   type?: 'paragraph';
+//   text?: string;     // 纯文本（编辑器输入）
+//   content?: string;  // HTML 段落（渲染用）
+// };
+
+// type Props = {
+//   value: ParagraphData;
+//   onChange: (next: ParagraphData) => void | Promise<void>;
+//   onUpload: (file: File) => Promise<string>; // 未使用，但保留签名以兼容父组件
+// };
+
+// /** <p>..</p><p>..</p> => "段落1\n\n段落2" */
+// function htmlToPlainParagraphs(html?: string): string {
+//   if (!html) return '';
+//   const trimmed = html.trim();
+//   if (!trimmed) return '';
+//   const parts = trimmed
+//     .replace(/^<p>/i, '')
+//     .replace(/<\/p>$/i, '')
+//     .split(/<\/p>\s*<p>/i)
+//     .map(s => s.replace(/<[^>]+>/g, '').trim())
+//     .filter(Boolean);
+//   return parts.join('\n\n');
+// }
+
+// /** "段落1\n\n段落2" => <p>段落1</p><p>段落2</p> */
+// function plainToHtmlParagraphs(text?: string): string {
+//   const parts = String(text ?? '')
+//     .split(/\n{2,}/) // 空行分段
+//     .map(s => s.trim())
+//     .filter(Boolean);
+//   if (!parts.length) return '';
+//   return `<p>${parts.join('</p><p>')}</p>`;
+// }
+
+// export default function ParagraphEditForm({ value, onChange }: Props) {
+//   // 进入编辑时的“原始快照”
+//   const snapshotText = useMemo(() => {
+//     if (value?.text && value.text.trim() !== '') return value.text;
+//     return htmlToPlainParagraphs(value?.content);
+//   }, [value]);
+
+//   // 本地可编辑状态（未确认前不写回父级）
+//   const [localText, setLocalText] = useState<string>(snapshotText);
+
+//   // 外部 value 更新时，重置快照与本地值
+//   useEffect(() => {
+//     setLocalText(snapshotText);
+//   }, [snapshotText]);
+
+//   // 确认：把编辑结果写回（同时维护 text 与 content）
+//   const handleConfirm = async () => {
+//     const next: ParagraphData = {
+//       ...(value ?? { type: 'paragraph' }),
+//       type: 'paragraph',
+//       text: localText,
+//       content: plainToHtmlParagraphs(localText),
+//     };
+//     await onChange(next);
+//   };
+
+//   // 取消：丢弃本地更改，恢复快照
+//   const handleCancel = () => {
+//     setLocalText(snapshotText);
+//   };
+
+//   return (
+//     <div
+//       className="paragraph-card"
+//       style={{
+//         border: '1px solid rgba(0,0,0,0.08)',
+//         borderRadius: 12,
+//         padding: 16,
+//         marginTop: 8,
+//         marginBottom: 12,
+//         boxShadow: '0 2px 10px rgba(0,0,0,0.04)',
+//         background: '#fff',
+//       }}
+//     >
+//       <div style={{ display: 'grid', gap: 8 }}>
+//         <label
+//           className="form-label"
+//           style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}
+//         >
+//           Text
+//         </label>
+
+//         <textarea
+//           className="form-textarea"
+//           style={{
+//             width: '100%',
+//             minHeight: 140,
+//             resize: 'vertical',
+//             border: '1px solid rgba(0,0,0,0.12)',
+//             borderRadius: 8,
+//             padding: '10px 12px',
+//             lineHeight: 1.6,
+//             fontSize: 14,
+//           }}
+//           placeholder="在这里输入段落内容（空行分段；保存时会自动转换为<p>…</p>）"
+//           value={localText}
+//           onChange={(e) => setLocalText(e.target.value)}
+//         />
+
+//         <div
+//           className="form-hint"
+//           style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}
+//         >
+//           提示：用<strong>空行</strong>分隔段落；发布/预览时将使用 <code>&lt;p&gt;</code>{' '}
+//           标签渲染到 <code>content</code> 字段。
+//         </div>
+//       </div>
+
+//       {/* 底部操作区 */}
+//       <div
+//         className="paragraph-actions"
+//         style={{
+//           display: 'flex',
+//           gap: 10,
+//           justifyContent: 'flex-end',
+//           marginTop: 12,
+//         }}
+//       >
+//         <button
+//           type="button"
+//           onClick={handleConfirm}
+//           style={{
+//             height: 36,
+//             padding: '0 14px',
+//             borderRadius: 8,
+//             border: 'none',
+//             background:
+//               'linear-gradient(180deg, #10b981 0%, #059669 100%)', // 绿色确认按钮
+//             color: '#fff',
+//             fontWeight: 600,
+//             cursor: 'pointer',
+//           }}
+//         >
+//           确认
+//         </button>
+//         <button
+//           type="button"
+//           onClick={handleCancel}
+//           style={{
+//             height: 36,
+//             padding: '0 14px',
+//             borderRadius: 8,
+//             border: '1px solid rgba(0,0,0,0.15)',
+//             background: '#fff',
+//             color: '#374151',
+//             cursor: 'pointer',
+//           }}
+//         >
+//           取消
+//         </button>
+
+        
+//       </div>
+//     </div>
+//   );
+// }
+
 import React, { useEffect, useMemo, useState } from 'react';
 
 export type ParagraphData = {
@@ -118,6 +283,11 @@ type Props = {
   value: ParagraphData;
   onChange: (next: ParagraphData) => void | Promise<void>;
   onUpload: (file: File) => Promise<string>; // 未使用，但保留签名以兼容父组件
+
+  // 新增：可选的外部控制（由父组件传入）
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
+  onDelete?: () => void;
 };
 
 /** <p>..</p><p>..</p> => "段落1\n\n段落2" */
@@ -144,7 +314,13 @@ function plainToHtmlParagraphs(text?: string): string {
   return `<p>${parts.join('</p><p>')}</p>`;
 }
 
-export default function ParagraphEditForm({ value, onChange }: Props) {
+export default function ParagraphEditForm({
+  value,
+  onChange,
+  onMoveUp,
+  onMoveDown,
+  onDelete,
+}: Props) {
   // 进入编辑时的“原始快照”
   const snapshotText = useMemo(() => {
     if (value?.text && value.text.trim() !== '') return value.text;
@@ -173,6 +349,37 @@ export default function ParagraphEditForm({ value, onChange }: Props) {
   // 取消：丢弃本地更改，恢复快照
   const handleCancel = () => {
     setLocalText(snapshotText);
+  };
+
+  // 通用按钮样式
+  const btn = (extra?: React.CSSProperties): React.CSSProperties => ({
+    height: 36,
+    padding: '0 14px',
+    borderRadius: 8,
+    cursor: 'pointer',
+    ...extra,
+  });
+
+  const ghostBtnStyle: React.CSSProperties = {
+    ...btn(),
+    border: '1px solid rgba(0,0,0,0.15)',
+    background: '#fff',
+    color: '#374151',
+  };
+
+  const dangerBtnStyle: React.CSSProperties = {
+    ...btn(),
+    border: '1px solid rgba(220,38,38,0.3)',
+    background: '#fff',
+    color: '#dc2626',
+  };
+
+  const primaryBtnStyle: React.CSSProperties = {
+    ...btn(),
+    border: 'none',
+    background: 'linear-gradient(180deg, #10b981 0%, #059669 100%)',
+    color: '#fff',
+    fontWeight: 600,
   };
 
   return (
@@ -222,51 +429,49 @@ export default function ParagraphEditForm({ value, onChange }: Props) {
         </div>
       </div>
 
-      {/* 底部操作区 */}
+      {/* 底部操作区：左侧 上/下/删除；右侧 取消/确认 */}
       <div
         className="paragraph-actions"
         style={{
           display: 'flex',
           gap: 10,
-          justifyContent: 'flex-end',
+          alignItems: 'center',
+          justifyContent: 'space-between',
           marginTop: 12,
+          flexWrap: 'wrap',
         }}
       >
-        <button
-          type="button"
-          onClick={handleConfirm}
-          style={{
-            height: 36,
-            padding: '0 14px',
-            borderRadius: 8,
-            border: 'none',
-            background:
-              'linear-gradient(180deg, #10b981 0%, #059669 100%)', // 绿色确认按钮
-            color: '#fff',
-            fontWeight: 600,
-            cursor: 'pointer',
-          }}
-        >
-          确认
-        </button>
-        <button
-          type="button"
-          onClick={handleCancel}
-          style={{
-            height: 36,
-            padding: '0 14px',
-            borderRadius: 8,
-            border: '1px solid rgba(0,0,0,0.15)',
-            background: '#fff',
-            color: '#374151',
-            cursor: 'pointer',
-          }}
-        >
-          取消
-        </button>
+        {/* 左侧：排序/删除（仅在传入对应回调时显示） */}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {onMoveUp && (
+            <button type="button" onClick={onMoveUp} style={ghostBtnStyle} title="向上">
+              ↑
+            </button>
+          )}
+          {onMoveDown && (
+            <button type="button" onClick={onMoveDown} style={ghostBtnStyle} title="向下">
+              ↓
+            </button>
+          )}
+          {onDelete && (
+            <button type="button" onClick={onDelete} style={dangerBtnStyle} title="删除">
+              Delete
+            </button>
+          )}
+        </div>
 
-        
+        {/* 右侧：取消 / 确认 */}
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button type="button" onClick={handleCancel} style={ghostBtnStyle}>
+            取消
+          </button>
+          <button type="button" onClick={handleConfirm} style={primaryBtnStyle}>
+            确认
+          </button>
+        </div>
       </div>
     </div>
   );
 }
+
+
