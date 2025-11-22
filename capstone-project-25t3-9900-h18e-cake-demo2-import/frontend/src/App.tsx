@@ -211,7 +211,7 @@ const RenderPullQuote: React.FC<{ data: any }> = ({ data }) => {
   return (
     <blockquote
       style={{
-        borderLeft: '4px solid '#444',
+        borderLeft: '4px solid #444',
         margin: 0,
         padding: '12px 16px',
         background: '#fafafa',
