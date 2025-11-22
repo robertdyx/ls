@@ -234,22 +234,6 @@ export default function ParagraphEditForm({ value, onChange }: Props) {
       >
         <button
           type="button"
-          onClick={handleCancel}
-          style={{
-            height: 36,
-            padding: '0 14px',
-            borderRadius: 8,
-            border: '1px solid rgba(0,0,0,0.15)',
-            background: '#fff',
-            color: '#374151',
-            cursor: 'pointer',
-          }}
-        >
-          取消
-        </button>
-
-        <button
-          type="button"
           onClick={handleConfirm}
           style={{
             height: 36,
@@ -265,6 +249,23 @@ export default function ParagraphEditForm({ value, onChange }: Props) {
         >
           确认
         </button>
+        <button
+          type="button"
+          onClick={handleCancel}
+          style={{
+            height: 36,
+            padding: '0 14px',
+            borderRadius: 8,
+            border: '1px solid rgba(0,0,0,0.15)',
+            background: '#fff',
+            color: '#374151',
+            cursor: 'pointer',
+          }}
+        >
+          取消
+        </button>
+
+        
       </div>
     </div>
   );
