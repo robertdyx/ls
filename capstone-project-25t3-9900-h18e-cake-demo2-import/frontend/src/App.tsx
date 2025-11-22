@@ -42,7 +42,7 @@ type Mode = 'view' | 'edit';
 type Device = 'desktop' | 'tablet' | 'iphone' | 'android';
 
 /** 设备外框尺寸（仅前端样式模拟） */
-const DEVICE_SIZE: Record<Device, { w: number; scale?: number }> = {
+const DEVICE_SIZE: Record<Device, { w: number }> = {
   desktop: { w: 1200 },
   tablet: { w: 820 },
   iphone: { w: 390 },
@@ -50,7 +50,7 @@ const DEVICE_SIZE: Record<Device, { w: number; scale?: number }> = {
 };
 
 /** ==================== 渲染组件 ==================== */
-/** 替换后的 Hero：完全按扁平字段渲染 */
+/** Hero：按扁平字段渲染 */
 const RenderHero: React.FC<{ data: any }> = ({ data }) => {
   const title: string = data?.title ?? '';
   const kicker: string = data?.kicker ?? '';
@@ -205,28 +205,84 @@ const RenderParagraph: React.FC<{ data: any }> = ({ data }) => {
   );
 };
 
+/** ==================== Pull Quote（新版：大字号 + 四角装饰） ==================== */
 const RenderPullQuote: React.FC<{ data: any }> = ({ data }) => {
-  const text = data?.text || '';
-  const cite = data?.cite || '';
+  const text = (data?.text || '').toString();
+  const cite = (data?.cite || '').toString();
+  // 颜色优先从数据取，其次从主题色取，最后给一个好看的绿色
+  const color =
+    data?.color ||
+    data?.textColor ||
+    '#2f6f5e'; // 近似你截图中的绿色（也可换成 story.theme_primary_color 传入）
+
+  const box: React.CSSProperties = {
+    position: 'relative',
+    borderBottom: '1px solid #eee',
+    padding: '32px 20px 36px',
+    background: '#ffffff',
+  };
+
+  const inner: React.CSSProperties = {
+    maxWidth: 980,
+    margin: '0 auto',
+    textAlign: 'center',
+    color,
+    fontFamily: 'Georgia, "Times New Roman", Times, serif',
+  };
+
+  const quoteStyle: React.CSSProperties = {
+    fontWeight: 800,
+    // 大字号；在不同设备下也能接受的范围
+    fontSize: 'clamp(28px, 5vw, 48px)',
+    lineHeight: 1.25,
+    margin: 0,
+  };
+
+  const byline: React.CSSProperties = {
+    marginTop: 10,
+    fontSize: 14,
+    color: '#5f6f67',
+  };
+
+  // 四角装饰：两个角（左下 / 右上）
+  const cornerSize = 26;
+  const cornerWidth = 10;
+
+  const cornerBase: React.CSSProperties = {
+    position: 'absolute',
+    width: cornerSize,
+    height: cornerSize,
+  };
+
+  const cornerBL: React.CSSProperties = {
+    ...cornerBase,
+    left: 16,
+    bottom: 10,
+    borderLeft: `${cornerWidth}px solid ${color}`,
+    borderBottom: `${cornerWidth}px solid ${color}`,
+  };
+
+  const cornerTR: React.CSSProperties = {
+    ...cornerBase,
+    right: 16,
+    top: 10,
+    borderRight: `${cornerWidth}px solid ${color}`,
+    borderTop: `${cornerWidth}px solid ${color}`,
+  };
+
   return (
-    <blockquote
-      style={{
-        borderLeft: '4px solid #444',
-        margin: 0,
-        padding: '12px 16px',
-        background: '#fafafa',
-        borderBottom: '1px solid #eee',
-      }}
-    >
-      <div style={{ fontSize: 18, fontStyle: 'italic' }}>{text}</div>
-      {cite && <div style={{ marginTop: 6, fontSize: 12, color: '#666' }}>— {cite}</div>}
-    </blockquote>
+    <section style={box}>
+      <div style={inner}>
+        <p style={quoteStyle}>{text}</p>
+        {cite && <div style={byline}>— {cite}</div>}
+      </div>
+      <span style={cornerBL} aria-hidden />
+      <span style={cornerTR} aria-hidden />
+    </section>
   );
 };
 
-/* ========= 新增：视频源自动识别与播放（YouTube/Vimeo/HLS/直链） ========= */
-
-// URL 识别与转换
+/* ========= 视频源自动识别与播放（YouTube/Vimeo/HLS/直链） ========= */
 function toYouTubeEmbed(url: string): string | null {
   if (!url) return null;
   const m = url.match(/(?:watch\?v=|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
@@ -246,8 +302,6 @@ function pickVideoType(url: string): string | undefined {
   if (/\.ogv?(\?|#|$)/i.test(url)) return 'video/ogg';
   return undefined;
 }
-
-// 按需加载 hls.js（仅当需要且浏览器不原生支持时）
 async function ensureHls() {
   const g = globalThis as any;
   if (g.Hls) return g.Hls as any;
@@ -261,8 +315,6 @@ async function ensureHls() {
   });
   return (globalThis as any).Hls as any;
 }
-
-// —— 新版：自动适配多种视频源 —— //
 const RenderVideo: React.FC<{ data: any }> = ({ data }) => {
   const raw = data?.src || data?.url || '';
   const poster = data?.poster || '';
@@ -276,7 +328,6 @@ const RenderVideo: React.FC<{ data: any }> = ({ data }) => {
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
-  // HLS 处理：Chrome/Edge 需要 hls.js，Safari 原生可播
   React.useEffect(() => {
     let hlsInstance: any;
     setError(null);
@@ -285,12 +336,10 @@ const RenderVideo: React.FC<{ data: any }> = ({ data }) => {
     const el = videoRef.current;
     if (!el) return;
 
-    // Safari 原生支持
     if (el.canPlayType('application/vnd.apple.mpegurl')) {
       el.src = raw;
       return;
     }
-    // 其它浏览器：动态加载 hls.js
     (async () => {
       try {
         const Hls = await ensureHls();
@@ -313,7 +362,6 @@ const RenderVideo: React.FC<{ data: any }> = ({ data }) => {
     };
   }, [raw, hls]);
 
-  // 统一的容器（16:9 响应式）
   const frame: React.CSSProperties = {
     position: 'relative',
     width: '100%',
@@ -329,7 +377,6 @@ const RenderVideo: React.FC<{ data: any }> = ({ data }) => {
     height: '100%',
   };
 
-  // 1) YouTube / Vimeo：iframe 播放
   if (yt || vm) {
     const src = yt || vm!;
     return (
@@ -349,7 +396,6 @@ const RenderVideo: React.FC<{ data: any }> = ({ data }) => {
     );
   }
 
-  // 2) HLS：<video> + hls.js（或 Safari 原生）
   if (hls) {
     return (
       <div style={{ padding: 20, borderBottom: '1px solid #eee' }}>
@@ -360,7 +406,6 @@ const RenderVideo: React.FC<{ data: any }> = ({ data }) => {
             playsInline
             poster={poster || undefined}
             style={abs}
-            // 不直接设置 src，由上面的 effect 按浏览器能力注入
           />
         </div>
         {caption && <div style={{ marginTop: 8, color: '#666' }}>{caption}</div>}
@@ -369,7 +414,6 @@ const RenderVideo: React.FC<{ data: any }> = ({ data }) => {
     );
   }
 
-  // 3) 直链文件：原生 <video>
   if (fileType) {
     return (
       <div style={{ padding: 20, borderBottom: '1px solid #eee' }}>
@@ -383,7 +427,6 @@ const RenderVideo: React.FC<{ data: any }> = ({ data }) => {
     );
   }
 
-  // 4) 其它未知链接：提示
   return (
     <div style={{ padding: 20, borderBottom: '1px solid #eee' }}>
       <div
@@ -468,8 +511,7 @@ const DeviceFrame: React.FC<{ device: Device; children: React.ReactNode }> = ({
   device,
   children,
 }) => {
-  const spec = DEVICE_SIZE[device];
-  const w = spec.w;
+  const w = DEVICE_SIZE[device].w;
   const outer: React.CSSProperties = {
     width: '100%',
     display: 'flex',
