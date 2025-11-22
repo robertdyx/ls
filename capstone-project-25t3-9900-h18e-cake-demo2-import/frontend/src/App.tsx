@@ -42,7 +42,7 @@ type Mode = 'view' | 'edit';
 type Device = 'desktop' | 'tablet' | 'iphone' | 'android';
 
 /** 设备外框尺寸（仅前端样式模拟） */
-const DEVICE_SIZE: Record<Device, { w: number }> = {
+const DEVICE_SIZE: Record<Device, { w: number; scale?: number }> = {
   desktop: { w: 1200 },
   tablet: { w: 820 },
   iphone: { w: 390 },
@@ -50,7 +50,7 @@ const DEVICE_SIZE: Record<Device, { w: number }> = {
 };
 
 /** ==================== 渲染组件 ==================== */
-/** Hero：按扁平字段渲染 */
+/** 替换后的 Hero：完全按扁平字段渲染 */
 const RenderHero: React.FC<{ data: any }> = ({ data }) => {
   const title: string = data?.title ?? '';
   const kicker: string = data?.kicker ?? '';
@@ -205,84 +205,28 @@ const RenderParagraph: React.FC<{ data: any }> = ({ data }) => {
   );
 };
 
-/** ==================== Pull Quote（新版：大字号 + 四角装饰） ==================== */
 const RenderPullQuote: React.FC<{ data: any }> = ({ data }) => {
-  const text = (data?.text || '').toString();
-  const cite = (data?.cite || '').toString();
-  // 颜色优先从数据取，其次从主题色取，最后给一个好看的绿色
-  const color =
-    data?.color ||
-    data?.textColor ||
-    '#2f6f5e'; // 近似你截图中的绿色（也可换成 story.theme_primary_color 传入）
-
-  const box: React.CSSProperties = {
-    position: 'relative',
-    borderBottom: '1px solid #eee',
-    padding: '32px 20px 36px',
-    background: '#ffffff',
-  };
-
-  const inner: React.CSSProperties = {
-    maxWidth: 980,
-    margin: '0 auto',
-    textAlign: 'center',
-    color,
-    fontFamily: 'Georgia, "Times New Roman", Times, serif',
-  };
-
-  const quoteStyle: React.CSSProperties = {
-    fontWeight: 800,
-    // 大字号；在不同设备下也能接受的范围
-    fontSize: 'clamp(28px, 5vw, 48px)',
-    lineHeight: 1.25,
-    margin: 0,
-  };
-
-  const byline: React.CSSProperties = {
-    marginTop: 10,
-    fontSize: 14,
-    color: '#5f6f67',
-  };
-
-  // 四角装饰：两个角（左下 / 右上）
-  const cornerSize = 26;
-  const cornerWidth = 10;
-
-  const cornerBase: React.CSSProperties = {
-    position: 'absolute',
-    width: cornerSize,
-    height: cornerSize,
-  };
-
-  const cornerBL: React.CSSProperties = {
-    ...cornerBase,
-    left: 16,
-    bottom: 10,
-    borderLeft: `${cornerWidth}px solid ${color}`,
-    borderBottom: `${cornerWidth}px solid ${color}`,
-  };
-
-  const cornerTR: React.CSSProperties = {
-    ...cornerBase,
-    right: 16,
-    top: 10,
-    borderRight: `${cornerWidth}px solid ${color}`,
-    borderTop: `${cornerWidth}px solid ${color}`,
-  };
-
+  const text = data?.text || '';
+  const cite = data?.cite || '';
   return (
-    <section style={box}>
-      <div style={inner}>
-        <p style={quoteStyle}>{text}</p>
-        {cite && <div style={byline}>— {cite}</div>}
-      </div>
-      <span style={cornerBL} aria-hidden />
-      <span style={cornerTR} aria-hidden />
-    </section>
+    <blockquote
+      style={{
+        borderLeft: '4px solid #444',
+        margin: 0,
+        padding: '12px 16px',
+        background: '#fafafa',
+        borderBottom: '1px solid #eee',
+      }}
+    >
+      <div style={{ fontSize: 18, fontStyle: 'italic' }}>{text}</div>
+      {cite && <div style={{ marginTop: 6, fontSize: 12, color: '#666' }}>— {cite}</div>}
+    </blockquote>
   );
 };
 
-/* ========= 视频源自动识别与播放（YouTube/Vimeo/HLS/直链） ========= */
+/* ========= 新增：视频源自动识别与播放（YouTube/Vimeo/HLS/直链） ========= */
+
+// URL 识别与转换
 function toYouTubeEmbed(url: string): string | null {
   if (!url) return null;
   const m = url.match(/(?:watch\?v=|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
@@ -302,6 +246,8 @@ function pickVideoType(url: string): string | undefined {
   if (/\.ogv?(\?|#|$)/i.test(url)) return 'video/ogg';
   return undefined;
 }
+
+// 按需加载 hls.js（仅当需要且浏览器不原生支持时）
 async function ensureHls() {
   const g = globalThis as any;
   if (g.Hls) return g.Hls as any;
@@ -315,6 +261,8 @@ async function ensureHls() {
   });
   return (globalThis as any).Hls as any;
 }
+
+// —— 新版：自动适配多种视频源 —— //
 const RenderVideo: React.FC<{ data: any }> = ({ data }) => {
   const raw = data?.src || data?.url || '';
   const poster = data?.poster || '';
@@ -328,6 +276,7 @@ const RenderVideo: React.FC<{ data: any }> = ({ data }) => {
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
+  // HLS 处理：Chrome/Edge 需要 hls.js，Safari 原生可播
   React.useEffect(() => {
     let hlsInstance: any;
     setError(null);
@@ -336,10 +285,12 @@ const RenderVideo: React.FC<{ data: any }> = ({ data }) => {
     const el = videoRef.current;
     if (!el) return;
 
+    // Safari 原生支持
     if (el.canPlayType('application/vnd.apple.mpegurl')) {
       el.src = raw;
       return;
     }
+    // 其它浏览器：动态加载 hls.js
     (async () => {
       try {
         const Hls = await ensureHls();
@@ -362,6 +313,7 @@ const RenderVideo: React.FC<{ data: any }> = ({ data }) => {
     };
   }, [raw, hls]);
 
+  // 统一的容器（16:9 响应式）
   const frame: React.CSSProperties = {
     position: 'relative',
     width: '100%',
@@ -377,6 +329,7 @@ const RenderVideo: React.FC<{ data: any }> = ({ data }) => {
     height: '100%',
   };
 
+  // 1) YouTube / Vimeo：iframe 播放
   if (yt || vm) {
     const src = yt || vm!;
     return (
@@ -396,6 +349,7 @@ const RenderVideo: React.FC<{ data: any }> = ({ data }) => {
     );
   }
 
+  // 2) HLS：<video> + hls.js（或 Safari 原生）
   if (hls) {
     return (
       <div style={{ padding: 20, borderBottom: '1px solid #eee' }}>
@@ -406,6 +360,7 @@ const RenderVideo: React.FC<{ data: any }> = ({ data }) => {
             playsInline
             poster={poster || undefined}
             style={abs}
+            // 不直接设置 src，由上面的 effect 按浏览器能力注入
           />
         </div>
         {caption && <div style={{ marginTop: 8, color: '#666' }}>{caption}</div>}
@@ -414,6 +369,7 @@ const RenderVideo: React.FC<{ data: any }> = ({ data }) => {
     );
   }
 
+  // 3) 直链文件：原生 <video>
   if (fileType) {
     return (
       <div style={{ padding: 20, borderBottom: '1px solid #eee' }}>
@@ -427,6 +383,7 @@ const RenderVideo: React.FC<{ data: any }> = ({ data }) => {
     );
   }
 
+  // 4) 其它未知链接：提示
   return (
     <div style={{ padding: 20, borderBottom: '1px solid #eee' }}>
       <div
@@ -467,6 +424,100 @@ const RenderUnknown: React.FC<{ data: any; type: string }> = ({ data, type }) =>
   );
 };
 
+/* ========= 新增：ImageGroup 组件（单图居中 & 多图并排 + layout） ========= */
+const RenderImageGroup: React.FC<{ data: any }> = ({ data }) => {
+  const list: any[] = Array.isArray(data?.images)
+    ? data.images
+    : Array.isArray(data?.items)
+    ? data.items
+    : [];
+
+  // 单图：直接复用单图渲染并居中
+  if (list.length <= 1) {
+    const img = list[0] || data;
+    return <RenderImage data={img} center />;
+  }
+
+  // 多图：按 layout 并排（third/half/default/superfull）
+  const wrapStyle: React.CSSProperties = {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: 12,
+    padding: 12,
+    borderBottom: '1px solid #eee',
+    justifyContent: 'center',
+  };
+
+  const basis = (layout?: string) => {
+    const t = String(layout || 'default').toLowerCase();
+    if (t === 'third') return 'calc(33.333% - 8px)';
+    if (t === 'half') return 'calc(50% - 8px)';
+    if (t === 'default') return '100%';
+    return '100%';
+  };
+
+  return (
+    <div>
+      <div style={wrapStyle}>
+        {list.map((img, idx) => {
+          const layout = String(img?.layout || 'default').toLowerCase();
+
+          if (layout === 'superfull') {
+            return (
+              <figure key={idx} style={{ width: '100%', margin: 0, padding: '12px 0' }}>
+                <div
+                  style={{
+                    width: '100vw',
+                    marginLeft: 'calc(50% - 50vw)',
+                    background: '#00000008',
+                  }}
+                >
+                  <img
+                    src={img?.src}
+                    alt={img?.alt || ''}
+                    style={{ display: 'block', width: '100%', height: 'auto' }}
+                  />
+                </div>
+                {(img?.caption || img?.credit) && (
+                  <figcaption
+                    style={{ color: '#666', marginTop: 8, fontSize: 14, textAlign: 'center' }}
+                  >
+                    {img?.caption}
+                    {img?.credit ? <span style={{ color: '#999' }}> · {img.credit}</span> : null}
+                  </figcaption>
+                )}
+              </figure>
+            );
+          }
+
+          const fb = basis(layout);
+          return (
+            <figure key={idx} style={{ flex: `0 1 ${fb}`, margin: 0 }}>
+              {img?.src ? (
+                <img
+                  src={img.src}
+                  alt={img?.alt || ''}
+                  style={{ display: 'block', width: '100%', height: 'auto', borderRadius: 8 }}
+                />
+              ) : (
+                <div style={{ padding: 16, background: '#fafafa', border: '1px dashed #ddd' }}>
+                  Image URL is empty
+                </div>
+              )}
+              {(img?.caption || img?.credit) && (
+                <figcaption style={{ color: '#666', marginTop: 6, fontSize: 13, textAlign: 'center' }}>
+                  {img?.caption}
+                  {img?.credit ? <span style={{ color: '#999' }}> · {img.credit}</span> : null}
+                </figcaption>
+              )}
+            </figure>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
 /** 按类型渲染一条分段 */
 const SectionRenderer: React.FC<{ row: SectionRow; centerSingleImage?: boolean }> = ({
   row,
@@ -478,16 +529,7 @@ const SectionRenderer: React.FC<{ row: SectionRow; centerSingleImage?: boolean }
   if (t === 'paragraph') return <RenderParagraph data={row.data} />;
   if (t === 'pullquote') return <RenderPullQuote data={row.data} />;
   if (t === 'video') return <RenderVideo data={row.data} />;
-  if (t === 'imagegroup') {
-    const items: any[] = Array.isArray(row.data?.items) ? row.data.items : [];
-    return (
-      <div>
-        {items.map((it, i) => (
-          <RenderImage key={i} data={it} />
-        ))}
-      </div>
-    );
-  }
+  if (t === 'imagegroup') return <RenderImageGroup data={row.data} />;
   if (t === 'scrollytelling') {
     const steps: any[] = Array.isArray(row.data?.steps) ? row.data.steps : [];
     return (
@@ -511,7 +553,8 @@ const DeviceFrame: React.FC<{ device: Device; children: React.ReactNode }> = ({
   device,
   children,
 }) => {
-  const w = DEVICE_SIZE[device].w;
+  const spec = DEVICE_SIZE[device];
+  const w = spec.w;
   const outer: React.CSSProperties = {
     width: '100%',
     display: 'flex',
