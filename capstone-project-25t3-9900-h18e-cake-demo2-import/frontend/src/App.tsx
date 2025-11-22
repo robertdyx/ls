@@ -41,8 +41,8 @@ type ImportedJson = {
 type Mode = 'view' | 'edit';
 type Device = 'desktop' | 'tablet' | 'iphone' | 'android';
 
-/** 设备外框尺寸（仅前端样式模拟） */
-const DEVICE_SIZE: Record<Device, { w: number; scale?: number }> = {
+/** 设备外框尺寸 */
+const DEVICE_SIZE: Record<Device, { w: number }> = {
   desktop: { w: 1200 },
   tablet: { w: 820 },
   iphone: { w: 390 },
@@ -50,7 +50,7 @@ const DEVICE_SIZE: Record<Device, { w: number; scale?: number }> = {
 };
 
 /** ==================== 渲染组件 ==================== */
-/** Hero：按扁平字段渲染（支持题主 JSON 的 hero 字段） */
+/** Hero：按扁平字段渲染 */
 const RenderHero: React.FC<{ data: any }> = ({ data }) => {
   const title: string = data?.title ?? '';
   const kicker: string = data?.kicker ?? '';
@@ -207,7 +207,7 @@ const RenderParagraph: React.FC<{ data: any }> = ({ data }) => {
   );
 };
 
-/** Pull Quote：大字号+四角装饰（贴近你的目标样式） */
+/** Pull Quote：大字号+四角装饰 */
 const RenderPullQuote: React.FC<{ data: any }> = ({ data }) => {
   const text = (data?.text || '').toString();
   const cite = (data?.cite || '').toString();
@@ -265,7 +265,7 @@ const RenderPullQuote: React.FC<{ data: any }> = ({ data }) => {
   );
 };
 
-/* ========= 视频源自动识别（YouTube/Vimeo/HLS/直链） ========= */
+/* ========= 视频源自动识别 ========= */
 function toYouTubeEmbed(url: string): string | null {
   if (!url) return null;
   const m = url.match(/(?:watch\?v=|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
@@ -480,39 +480,18 @@ const RenderImageGroup: React.FC<{ data: any }> = ({ data }) => {
   );
 };
 
-/* ========= Scrollytelling（根据题主 JSON 结构：height + textBlocks + backgroundImages） ========= */
+/* ========= Scrollytelling：单舞台+覆盖文字+隐形触发器 ========= */
 const RenderScrolly: React.FC<{ data: any }> = ({ data }) => {
+  // 支持 JSON: { height, textBlocks:[{content, triggerProgress?}], backgroundImages:[...]}
   const height = (data?.height as string) || '400vh';
   const textBlocks: Array<{ content?: string; triggerProgress?: number }> =
     Array.isArray(data?.textBlocks) ? data.textBlocks : [];
   const bgImages: string[] = Array.isArray(data?.backgroundImages) ? data.backgroundImages : [];
 
-  // 计算每个 step 的进入边界，随滚动切换当前背景
-  const containerRef = useRef<HTMLDivElement | null>(null);
   const [active, setActive] = useState(0);
+  const stepsRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    const root = containerRef.current;
-    if (!root) return;
-
-    const steps = Array.from(root.querySelectorAll<HTMLElement>('[data-step]'));
-    const obs = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((e) => {
-          if (e.isIntersecting) {
-            const idx = Number(e.target.getAttribute('data-step') || 0);
-            setActive(idx);
-          }
-        });
-      },
-      { root: null, threshold: 0.6 }
-    );
-
-    steps.forEach((el) => obs.observe(el));
-    return () => obs.disconnect();
-  }, [textBlocks.length]);
-
-  // 清洗文本
+  // 清洗段落
   const clean = (html?: string) =>
     (html || '')
       .replace(/^<p>/i, '')
@@ -521,77 +500,93 @@ const RenderScrolly: React.FC<{ data: any }> = ({ data }) => {
       .map(s => s.replace(/<[^>]+>/g, '').trim())
       .filter(Boolean);
 
-  // UI
+  // 监听不可见 step 的进入以切换索引
+  useEffect(() => {
+    const root = stepsRef.current;
+    if (!root) return;
+    const items = Array.from(root.querySelectorAll<HTMLElement>('[data-step]'));
+    const io = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((e) => {
+          if (e.isIntersecting) {
+            const idx = Number(e.target.getAttribute('data-step') || 0);
+            setActive(idx);
+          }
+        });
+      },
+      { threshold: 0.6 }
+    );
+    items.forEach((el) => io.observe(el));
+    return () => io.disconnect();
+  }, [textBlocks.length]);
+
+  // 舞台（sticky）样式
+  const stageWrap: React.CSSProperties = { position: 'relative', height };
+  const stageSticky: React.CSSProperties = {
+    position: 'sticky', top: 0, height: '100vh', overflow: 'hidden', background: '#000',
+  };
+  const absFill: React.CSSProperties = { position: 'absolute', inset: 0, width: '100%', height: '100%' };
+
+  // 文字覆盖层
+  const overlayCard: React.CSSProperties = {
+    position: 'absolute',
+    left: '50%',
+    top: '50%',
+    transform: 'translate(-50%, -50%)',
+    maxWidth: 820,
+    width: 'min(92vw, 820px)',
+    background: 'rgba(255,255,255,.88)',
+    backdropFilter: 'saturate(120%) blur(2px)',
+    borderRadius: 14,
+    boxShadow: '0 12px 40px rgba(0,0,0,.18)',
+    padding: '20px 22px',
+    color: '#111827',
+    pointerEvents: 'none', // 不挡滚动
+  };
+
   return (
-    <section style={{ position: 'relative', borderBottom: '1px solid #eee' }}>
-      {/* 背景层：sticky 占位全屏，高度由 height 控制滚动距离 */}
-      <div style={{ position: 'relative', height }}>
-        <div
-          style={{
-            position: 'sticky',
-            top: 0,
-            height: '100vh',
-            overflow: 'hidden',
-            background: '#000',
-          }}
-        >
+    <section style={{ borderBottom: '1px solid #eee' }}>
+      {/* 粘性舞台：背景图 + 覆盖文字 */}
+      <div style={stageWrap}>
+        <div style={stageSticky}>
+          {/* 背景序列 */}
           {bgImages.map((src, i) => (
             <img
               key={i}
               src={src}
               alt=""
               style={{
-                position: 'absolute',
-                inset: 0,
-                width: '100%',
-                height: '100%',
+                ...absFill,
                 objectFit: 'cover',
                 opacity: active === i ? 1 : 0,
-                transition: 'opacity .5s ease',
+                transition: 'opacity .6s ease',
               }}
             />
           ))}
+
+          {/* 覆盖文字（当前 active） */}
+          <div style={overlayCard}>
+            {textBlocks[active]
+              ? clean(textBlocks[active].content).map((t, j) => (
+                  <p key={j} style={{ margin: '0 0 10px', lineHeight: 1.75, fontSize: 18 }}>
+                    {t}
+                  </p>
+                ))
+              : null}
+          </div>
         </div>
 
-        {/* 文本层：滚动内容 */}
-        <div
-          ref={containerRef}
-          style={{
-            position: 'relative',
-            margin: '0 auto',
-            maxWidth: 980,
-            pointerEvents: 'none', // 仅显示，不挡背景
-          }}
-        >
-          {textBlocks.map((b, i) => (
+        {/* 隐形滚动步骤：仅用于触发 active 切换（不显示） */}
+        <div ref={stepsRef}>
+          {textBlocks.map((_, i) => (
             <div
               key={i}
               data-step={i}
               style={{
-                minHeight: '60vh',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: '24px 16px',
+                height: '75vh',
+                opacity: 0,
               }}
-            >
-              <div
-                style={{
-                  background: 'rgba(255,255,255,.9)',
-                  backdropFilter: 'saturate(120%) blur(2px)',
-                  borderRadius: 12,
-                  padding: 20,
-                  boxShadow: '0 8px 30px rgba(0,0,0,.12)',
-                  pointerEvents: 'auto',
-                }}
-              >
-                {clean(b?.content).map((t, j) => (
-                  <p key={j} style={{ margin: '0 0 12px', lineHeight: 1.7, fontSize: 18 }}>
-                    {t}
-                  </p>
-                ))}
-              </div>
-            </div>
+            />
           ))}
         </div>
       </div>
